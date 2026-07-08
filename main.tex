@@ -21,18 +21,52 @@ Discrete:
 F(s)P_{F}(s^{\prime }\mid s)=F(s^{\prime })P_{B}(s\mid s^{\prime })
 \end{equation}
 
-
+Continuous:
 \begin{equation}
+<<<<<<< HEAD
 F(s)p_{F}(s^{\prime }\mid s)=F(s^{\prime })p_{B}(s\mid s^{\prime })
+=======
+F(s)p_{F}(s^{\prime }\mid s)=F(s^{\prime })p_{B}(s\mid s^{\prime }
+>>>>>>> 7e1b6a1a0b2649a8c157407b9782afa503fe25b6
 \end{equation}
+Here the $p_F$ and $p_B$ are now continuous probability densities
 
 \subsection{Forward and Backward Policies}
 Sampling property is achieved thorugh an interplay between two parametrised neural netwroks (what kind of parametrisation?): a forward policy $P_F(s'|s)$ that handles sequential 'buidlind' decisions from the empty source state, and a backward policy $P_B(s|s')$ that retroactively allocates and updates probabilities between states to represent rewards down the network. This framework ensures that previously hidden states posessing high rewards are discovered, and forward policy weight of previously lower probability chices are updated to signal the presence of a downstream reward.
 
 
 
+\subsection{Balances}
+Detailed Balance (DB) enforces flow conservation at each specific node individually, wherease Trajectory Balance enforces flow conservation globally across an entire generative path $\tau$. Due to some maths (maybe I will include later) TB naturally enforces DB, making it superior as it eliminates the need to predict or memorise intermediate state flows $F(s)$. By shifting the learning target a single global cosntant Z (is this the partition function?), it drastically reduces computational complexity and memroy usage, making it highly scalable for complex generative tasks.Useful relation: $P(x) = \frac{R(x)}{Z}$, here $Z$ is the partition function or the total global flow, $P(x)$ and $R(x)$ are the probability and reward functions respectively.
 \subsection{Detailed Balance}
+For a discrete space, detailed balance is given as:
+\begin{equation}
+F(s)P_{F}(s^{\prime }\mid s)=F(s^{\prime })P_{B}(s\mid s^{\prime })
+\end{equation}
+where the left hand side shows the total flow at node $s$, multiplied bu the probability fo taking the step to $s\prime$. Essentially the flow from $s$ to $s\prime$. On the right, the total flow at the next node $s\prime$, multiplied byt the probabilit of undoing that step back to $s$. This can be thought of as incoming flow returning from $s\prime$ to $s$. Ensures perfectly equal flow at a node both ways.
+For a continuous space, the equation is practically identical:
+\begin{equation}
+F(s)p_{F}(s^{\prime }\mid s)=F(s^{\prime })p_{B}(s\mid s^{\prime })
+\end{equation}
+where the discrete proabbilities have now been replaced by probability densities $p_F$ and $p_B$. This shows that the flow density flux passing though any infintimesally mall coordinate transition must be perfectly symmetrical.
+
 \subsection{Trajectory Balance}
-hello hello hello
- s dsdsd
+As discussed before the trajectory balance focuses on flow conservation by looking at an entire sequence, and due to many paths intersecting, this naturally forces consevation at each node.
+For discrete spaces:
+\begin{equation}
+Z\prod _{t=0}^{n-1}P_{F}(s_{t+1}\mid s_{t})=R(x)\prod _{t=0}^{n-1}P_{B}(s_{t}\mid s_{t+1})
+\end{equation}
+
+Left hand side shows that the total global flow ($Z$) entering te entire system, multiplied byt the exact probability string of walking a specific trail ($\tau$) [trail as technically vertices can be repeated]. Represents the total amount of flow for that exact journey. Right hand side shows that the final target reward ($R(x)$) of the completed object, multiplied by the probability string of deconstructing that exact same object back to the beginning. This shows that the forward journey flow must perfectly balance out the backward journey reward structure.
+
+For continus spaces:
+\begin{equation}
+Z\prod _{t=0}^{n-1}p_{F}(s_{t+1}\mid s_{t})=R(x)\prod _{t=0}^{n-1}p_{B}(s_{t}\mid s_{t+1})
+\end{equation}
+Again, the probabilities have now been replaced by probability densities. Here we are matching probability densities. Shows that you can sample from smooth, infinite dimensional reward landscapes wihtout calculating explicit integrals (look over this exactly). The algortihm evaluates teh continuous probability densities step by step as it moves along a path. This allows. If the total ratio across the path deviates from 1, it changes the neural network's weights. It allows GFlowNets to function smoothly in physical, real-world continuous geometry.
+
+"" This is the GFlowNet equivalent of a Path Integral (similar to quantum mechanics). It shows that for any continuous trajectory curved through space, the product of the continuous forward action densities, scaled by the universe's total volume \(Z\), matches the terminal boundary condition \(R(x)\) scaled by the reverse path density."" - not written by me, assess this later
+
+s dsdsd
+
 \end{document}
