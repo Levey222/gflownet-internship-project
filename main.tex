@@ -10,9 +10,13 @@
 
 \maketitle
 
-\section{Introduction}
-\subsection{GFlowNet Structure}
-\subsection{Forward Policy}
+\section{Main structure}
+Generative modeling in discrete, compositional space represents a challenge in machine learning, particularly when applied to domains requiring complex strucutral design such as molecular discovery or graph generation. Traditional deep learning paradigms such as Reinforcement Learning (RL) frequently struggle in these environments, due to their optimisation for reward maximisation. Inherently, these disproportionately focus on a single local optimum, typically failing to discover a diverse sample of high-reward structures that are essential for real-world applications.
+To resolve this limitation, Generative Flow Networks (GFlowNets) have emerged as a probabilistic framework that utilises step-by-step object construction through a network of 'flow' conservation. Fromally, GFlowNets are modelled as Directed Acyclic Graphs, with the core objective is not to maximise a reward function $R(x)$, but rather to sample terminal objects proportional to it. By ensurng that the probability of generating any given completed structure satisfies $P(x) \propto R(x)$ (derived from Boltzmann and setting 'energy as log' -> maybe expand), GFlowNets preserve diversity during exploration and actively reveals high-reward results.
+
+
+\subsection{Forward and Backward Policies}
+Sampling property is achieved thorugh an interplay between two parametrised neural netwroks (what kind of parametrisation?): a forward policy $P_F(s'|s)$ that handles sequential 'buidlind' decisions from the empty source state, and a backward policy $P_B(s|s')$ that retroactively allocates and updates probabilities between states to represent rewards down the network. This framework ensures that previously hidden states posessing high rewards are discovered, and forward policy weight of previously lower probability chices are updated to signal the presence of a downstream reward.
 \subsection{Backward Policy}
 \subsection{Detailed Balance}
 \subsection{Trajectory Balance}
