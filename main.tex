@@ -10,7 +10,7 @@
 
 \maketitle
 
-\section{Main structure}
+\section{Overview}
 Generative modeling in discrete, compositional space represents a challenge in machine learning, particularly when applied to domains requiring complex structural design such as molecular discovery or graph generation. Traditional deep learning paradigms such as Reinforcement Learning (RL) frequently struggle in these environments, due to their optimisation for reward maximisation. In these settings, standard RL is usually not designed to sample a diverse set of high-reward solutions in proportion to reward, which is often important in real-world applications.
 To resolve this limitation, Generative Flow Networks (GFlowNets) have emerged as a probabilistic framework that uses step-by-step object construction through a network of flow conservation. Formally, GFlowNets are modelled as Directed Acyclic Graphs, with the core objective not to maximise a reward function $R(x)$, but rather to sample terminal objects proportional to it. By ensuring that the probability of generating any given completed structure satisfies $P(x) \propto R(x)$ (derived from Boltzmann and setting 'energy as log' -> maybe expand), GFlowNets preserve diversity during exploration and actively reveal high-reward results.
 
@@ -68,7 +68,7 @@ s dsdsd
 \section{Repo notes}
 These are just short notes for myself on what the main parts of the Recursion GFlowNet repo do.
 
-\subsection{Main setup}
+\subsection{What this repo is}
 The repo is mainly for discrete graph generation, especially molecules. It is not mainly a continuous GFlowNet repo. The code is organised around an environment, a context, a task, a trainer, a model, and an algorithm.
 
 \subsection{Environment}
@@ -89,16 +89,16 @@ The algorithm defines the learning rule. In this repo the main one is trajectory
 \subsection{Model}
 The main model is a graph transformer. It reads graph states and predicts forward action logits, and in some settings backward action logits too, along with graph level outputs such as log Z.
 
-\subsection{Data source}
+\subsection{Data pipeline}
 The data source mixes where training data comes from. It can use online samples from the current model, replay buffer samples, or offline dataset samples, then packs them into batches for training.
 
-\subsection{Main environments in the repo}
+\subsection{Main environments}
 There is a general graph building environment, an atom by atom molecule environment, a fragment based molecule environment, and a sequence environment. For this project the molecule and fragment environments are probably the most relevant ones.
 
-\subsection{Main tasks in the repo}
+\subsection{Main tasks}
 The simple task is make rings, which is useful just to understand the structure. The sEH fragment task is a more realistic molecule example using a proxy reward model. The QM9 task is another molecule setup using a pretrained property model. There is also a multiobjective sEH task.
 
-\subsection{What matters for my project}
+\subsection{What this actually means}
 This repo already gives a GFlowNet training system for discrete molecular generation. The real question for the project is how ChemGymRL should fit into this structure. Most likely the task or reward part will need to change, and possibly the environment too depending on what ChemGymRL state and action space look like.
 
 \section{ChemGymRL notes}
@@ -114,8 +114,8 @@ Vessels are containers that hold materials. A material can be a liquid, solvent,
 
 Bench means a type of experiment station. ChemGymRL has several benches that each do a different kind of lab task.
 
-\subsection{Main benches}
-Reaction bench means trying to turn starting chemicals into desired products. This is the most like doing a reaction in school chemistry, except the agent controls it by taking actions.
+\subsection{Main bench types}
+Reaction bench means trying to turn starting chemicals into desired products.
 
 Extraction bench means separating materials from a mixture using solvents and layers.
 
@@ -123,41 +123,24 @@ Distillation bench means separating materials by heating and boiling, then colle
 
 Characterization bench means measuring what is in a vessel rather than changing it.
 
-\subsection{Simple chemistry reminders for myself}
-Reactant means the starting chemical that goes into a reaction.
-
-Product means the chemical made by the reaction.
-
-Solvent means the liquid that other things are dissolved in.
-
-Solute means the thing dissolved in the solvent.
-
-Purity means how much of the stuff in a vessel is the thing I actually want, rather than unwanted material.
-
-Yield means how much of the desired product I end up with.
-
-Spectra means a measurement signal from the material. In ChemGymRL they use things like UV-Vis style spectra as part of the observation.
-
-PVT means pressure, volume, temperature.
-
-\subsection{What the agent actually sees}
+\subsection{What the agent sees}
 The agent does not just see a molecule graph. It sees observations from vessels, such as spectra, layers, and simple physical values like temperature and volume.
 
 This is important because ChemGymRL is more about controlling a process than directly generating a molecule.
 
-\subsection{What the actions are like}
+\subsection{What the actions look like}
 In the reaction bench, actions are continuous. That means the agent can choose values on a range, like how much heat to apply or how much of a reactant to add.
 
 In extraction and distillation, the code mostly uses discrete actions. That means the agent picks from a list of preset actions.
 
-\subsection{How reward works}
+\subsection{How the reward works}
 Reward is based on the experiment result, not on a molecule graph score.
 
 Usually the reward cares about things like how much target material is present, how pure it is, and sometimes penalties for unwanted material or waste.
 
 So the reward is about what ends up in the vessel.
 
-\subsection{Why this matters for my project}
+\subsection{What this actually means}
 The Recursion GFlowNet repo is mainly for discrete graph generation, especially molecules.
 
 ChemGymRL is mainly for lab process control.
@@ -170,10 +153,10 @@ If the GFlowNet generates molecules, then ChemGymRL would probably be a downstre
 
 If the GFlowNet generates lab procedures, then I would need a much bigger redesign, because the Recursion repo is not built around that kind of state space.
 
-\subsection{Current best guess}
+\subsection{My current guess}
 My current best guess is that ChemGymRL is meant to be used as a downstream environment for evaluation or reward, not as something that directly replaces the graph building environment in the GFlowNet repo.
 
-\subsection{Things I still need to clarify}
+\subsection{Questions for myself}
 What exactly is the GFlowNet output in this project.
 
 How that output becomes an input to ChemGymRL.
