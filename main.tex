@@ -66,7 +66,6 @@ Again, the probabilities have now been replaced by probability densities. This i
 s dsdsd
 
 \section{Repo notes}
-These are just short notes for myself on what the main parts of the Recursion GFlowNet repo do.
 
 \subsection{What this repo is}
 The repo is mainly for discrete graph generation, especially molecules. It is not mainly a continuous GFlowNet repo. The code is organised around an environment, a context, a task, a trainer, a model, and an algorithm.
@@ -102,7 +101,6 @@ The simple task is make rings, which is useful just to understand the structure.
 This repo already gives a GFlowNet training system for discrete molecular generation. The real question for the project is how ChemGymRL should fit into this structure. Most likely the task or reward part will need to change, and possibly the environment too depending on what ChemGymRL state and action space look like.
 
 \section{ChemGymRL notes}
-These are personal notes for myself. Keep them simple.
 
 \subsection{What ChemGymRL is}
 ChemGymRL is not a molecule generator. It is a virtual chemistry lab for reinforcement learning. The agent does chemistry style operations and gets rewards based on how good the experiment outcome is.
@@ -153,7 +151,7 @@ If the GFlowNet generates molecules, then ChemGymRL would probably be a downstre
 
 If the GFlowNet generates lab procedures, then I would need a much bigger redesign, because the Recursion repo is not built around that kind of state space.
 
-\subsection{My current guess}
+\subsection{Current guess}
 My current best guess is that ChemGymRL is meant to be used as a downstream environment for evaluation or reward, not as something that directly replaces the graph building environment in the GFlowNet repo.
 
 \subsection{Questions for myself}
