@@ -11,10 +11,10 @@
 \maketitle
 
 \section{Main structure}
-Generative modeling in discrete, compositional space represents a challenge in machine learning, particularly when applied to domains requiring complex strucutral design such as molecular discovery or graph generation. Traditional deep learning paradigms such as Reinforcement Learning (RL) frequently struggle in these environments, due to their optimisation for reward maximisation. Inherently, these disproportionately focus on a single local optimum, typically failing to discover a diverse sample of high-reward structures that are essential for real-world applications.
-To resolve this limitation, Generative Flow Networks (GFlowNets) have emerged as a probabilistic framework that utilises step-by-step object construction through a network of 'flow' conservation. Fromally, GFlowNets are modelled as Directed Acyclic Graphs, with the core objective is not to maximise a reward function $R(x)$, but rather to sample terminal objects proportional to it. By ensurng that the probability of generating any given completed structure satisfies $P(x) \propto R(x)$ (derived from Boltzmann and setting 'energy as log' -> maybe expand), GFlowNets preserve diversity during exploration and actively reveals high-reward results.
+Generative modeling in discrete, compositional space represents a challenge in machine learning, particularly when applied to domains requiring complex structural design such as molecular discovery or graph generation. Traditional deep learning paradigms such as Reinforcement Learning (RL) frequently struggle in these environments, due to their optimisation for reward maximisation. In these settings, standard RL is usually not designed to sample a diverse set of high-reward solutions in proportion to reward, which is often important in real-world applications.
+To resolve this limitation, Generative Flow Networks (GFlowNets) have emerged as a probabilistic framework that uses step-by-step object construction through a network of flow conservation. Formally, GFlowNets are modelled as Directed Acyclic Graphs, with the core objective not to maximise a reward function $R(x)$, but rather to sample terminal objects proportional to it. By ensuring that the probability of generating any given completed structure satisfies $P(x) \propto R(x)$ (derived from Boltzmann and setting 'energy as log' -> maybe expand), GFlowNets preserve diversity during exploration and actively reveal high-reward results.
 
-These GFlowNets have been expanded from discrete into continuous spaces, introducing infinitely many paths between any two states (hmm, look over the maths). Continuous GFlowNets replace discrete probabilities with measure thery and probability density functions (look over measure theory), where the model tracks the density of flow passing through a specific continuous region, and uses transition kernels (??) (continuous probability distributions).
+These GFlowNets have been expanded from discrete into continuous spaces, introducing infinitely many paths between any two states (hmm, look over the maths). In the continuous setting, the theory is more careful than simply replacing discrete probabilities with densities. Instead, it uses measure theory and transition kernels [a Markov kernel is just a rule that gives a distribution of next states from the current state] (look over measure theory). The model then describes how flow is distributed across continuous regions of the state space, rather than only across a finite list of states.
 dsdsd
 Discrete:
 \begin{equation}
@@ -25,44 +25,161 @@ Continuous:
 \begin{equation}
 F(s)p_{F}(s^{\prime }\mid s)=F(s^{\prime })p_{B}(s\mid s^{\prime })
 \end{equation}
-Here the $p_F$ and $p_B$ are now continuous probability densities
+Here the $p_F$ and $p_B$ are now continuous probability densities, although the full continuous theory is more careful than this shorthand
 
 \subsection{Forward and Backward Policies}
-Sampling property is achieved thorugh an interplay between two parametrised neural netwroks (what kind of parametrisation?): a forward policy $P_F(s'|s)$ that handles sequential 'buidlind' decisions from the empty source state, and a backward policy $P_B(s|s')$ that retroactively allocates and updates probabilities between states to represent rewards down the network. This framework ensures that previously hidden states posessing high rewards are discovered, and forward policy weight of previously lower probability chices are updated to signal the presence of a downstream reward.
+Sampling property is achieved through an interplay between two parametrised neural networks (what kind of parametrisation?): a forward policy $P_F(s'|s)$ that handles sequential building decisions from the empty source state, and a backward policy $P_B(s|s')$ that gives a distribution over which parent state may have led to the current state. The backward policy does not itself push reward backward through the network. Instead, it is used together with the forward policy and the flow equations to make the whole system consistent. This framework ensures that previously hidden states possessing high rewards are discovered, and forward policy weights of previously lower probability choices are updated to signal the presence of a downstream reward.
 
 
 
 \subsection{Balances}
-Detailed Balance (DB) enforces flow conservation at each specific node individually, wherease Trajectory Balance enforces flow conservation globally across an entire generative path $\tau$. Due to some maths (maybe I will include later) TB naturally enforces DB, making it superior as it eliminates the need to predict or memorise intermediate state flows $F(s)$. By shifting the learning target a single global cosntant Z (is this the partition function?), it drastically reduces computational complexity and memroy usage, making it highly scalable for complex generative tasks.Useful relation: $P(x) = \frac{R(x)}{Z}$, here $Z$ is the partition function or the total global flow, $P(x)$ and $R(x)$ are the probability and reward functions respectively.
+Detailed Balance (DB) enforces flow consistency at the level of individual transitions, whereas Trajectory Balance (TB) matches flow across an entire generative path $\tau$. Due to some maths (maybe I will include later) TB gives a different training objective that avoids the need to predict or memorise intermediate state flows $F(s)$. By shifting the learning target to a single global constant $Z$ (is this the partition function?), it can reduce computational complexity and memory usage, making it scalable for complex generative tasks. Useful relation: $P(x) = \frac{R(x)}{Z}$, here $Z$ is the partition function or the total global flow, $P(x)$ and $R(x)$ are the probability and reward functions respectively.
 \subsection{Detailed Balance}
 For a discrete space, detailed balance is given as:
 \begin{equation}
 F(s)P_{F}(s^{\prime }\mid s)=F(s^{\prime })P_{B}(s\mid s^{\prime })
 \end{equation}
-where the left hand side shows the total flow at node $s$, multiplied bu the probability fo taking the step to $s\prime$. Essentially the flow from $s$ to $s\prime$. On the right, the total flow at the next node $s\prime$, multiplied byt the probabilit of undoing that step back to $s$. This can be thought of as incoming flow returning from $s\prime$ to $s$. Ensures perfectly equal flow at a node both ways.
+where the left hand side shows the total flow at node $s$, multiplied by the probability of taking the step to $s^\prime$. This is the flow assigned to the edge from $s$ to $s^\prime$. On the right, the total flow at the next node $s^\prime$, multiplied by the probability of undoing that step back to $s$. This means the same edge flow is written in a forward form and a backward form. Flow conservation at a node then comes from matching these edge flows across the graph.
 For a continuous space, the equation is practically identical:
 \begin{equation}
 F(s)p_{F}(s^{\prime }\mid s)=F(s^{\prime })p_{B}(s\mid s^{\prime })
 \end{equation}
-where the discrete proabbilities have now been replaced by probability densities $p_F$ and $p_B$. This shows that the flow density flux passing though any infintimesally mall coordinate transition must be perfectly symmetrical.
+where the discrete probabilities have now been replaced by probability densities $p_F$ and $p_B$. This is a simple shorthand for the continuous case. In the full theory, the continuous version is written more carefully using measures and kernels. The main idea is still that the forward and backward views of a transition must agree.
 
 \subsection{Trajectory Balance}
-As discussed before the trajectory balance focuses on flow conservation by looking at an entire sequence, and due to many paths intersecting, this naturally forces consevation at each node.
+As discussed before, trajectory balance focuses on flow conservation by looking at an entire sequence, and due to many paths intersecting, this connects global path consistency to local consistency in the graph.
 For discrete spaces:
 \begin{equation}
 Z\prod _{t=0}^{n-1}P_{F}(s_{t+1}\mid s_{t})=R(x)\prod _{t=0}^{n-1}P_{B}(s_{t}\mid s_{t+1})
 \end{equation}
 
-Left hand side shows that the total global flow ($Z$) entering te entire system, multiplied byt the exact probability string of walking a specific trail ($\tau$) [trail as technically vertices can be repeated]. Represents the total amount of flow for that exact journey. Right hand side shows that the final target reward ($R(x)$) of the completed object, multiplied by the probability string of deconstructing that exact same object back to the beginning. This shows that the forward journey flow must perfectly balance out the backward journey reward structure.
+Left hand side shows the total global flow ($Z$) entering the entire system, multiplied by the exact probability string of walking a specific trail ($\tau$) [trail as technically vertices can be repeated]. This represents the total amount of flow for that exact journey. Right hand side shows the final target reward ($R(x)$) of the completed object, multiplied by the probability string of deconstructing that exact same object back to the beginning. This shows that the forward journey flow must balance with the backward path weighted by the terminal reward.
 
-For continus spaces:
+For continuous spaces:
 \begin{equation}
 Z\prod _{t=0}^{n-1}p_{F}(s_{t+1}\mid s_{t})=R(x)\prod _{t=0}^{n-1}p_{B}(s_{t}\mid s_{t+1})
 \end{equation}
-Again, the probabilities have now been replaced by probability densities. Here we are matching probability densities. Shows that you can sample from smooth, infinite dimensional reward landscapes wihtout calculating explicit integrals (look over this exactly). The algortihm evaluates teh continuous probability densities step by step as it moves along a path. This allows. If the total ratio across the path deviates from 1, it changes the neural network's weights. It allows GFlowNets to function smoothly in physical, real-world continuous geometry.
+Again, the probabilities have now been replaced by probability densities. This is the simple version of the idea, although the full continuous theory is written more carefully. The algorithm evaluates these quantities step by step as it moves along a path. If the total ratio across the path deviates from 1, it changes the neural network's weights. This is the basic idea behind extending GFlowNets to continuous geometry.
 
 "" This is the GFlowNet equivalent of a Path Integral (similar to quantum mechanics). It shows that for any continuous trajectory curved through space, the product of the continuous forward action densities, scaled by the universe's total volume \(Z\), matches the terminal boundary condition \(R(x)\) scaled by the reverse path density."" - not written by me, assess this later
 
 s dsdsd
+
+\section{Repo notes}
+These are just short notes for myself on what the main parts of the Recursion GFlowNet repo do.
+
+\subsection{Main setup}
+The repo is mainly for discrete graph generation, especially molecules. It is not mainly a continuous GFlowNet repo. The code is organised around an environment, a context, a task, a trainer, a model, and an algorithm.
+
+\subsection{Environment}
+The environment defines the state space and the legal actions. In this repo the base environment is a graph building environment, so it handles things like adding nodes, adding edges, setting attributes, and reversing actions for backward steps.
+
+\subsection{Context}
+The context translates between the graph in the environment and the tensors used by the neural network. It also converts between graph actions and action indices, and checks what actions are legal in each state.
+
+\subsection{Task}
+The task defines the reward side of the problem. It computes object properties, turns them into rewards, and samples any conditional information such as temperature or multiobjective preferences.
+
+\subsection{Trainer}
+The trainer builds everything and runs the training loop. It sets up the environment, task, context, model, algorithm, and data pipeline, then repeatedly samples trajectories, computes rewards, computes losses, and updates the model.
+
+\subsection{Algorithm}
+The algorithm defines the learning rule. In this repo the main one is trajectory balance, but there are also flow matching and some RL style baselines. The algorithm turns sampled trajectories into a training loss.
+
+\subsection{Model}
+The main model is a graph transformer. It reads graph states and predicts forward action logits, and in some settings backward action logits too, along with graph level outputs such as log Z.
+
+\subsection{Data source}
+The data source mixes where training data comes from. It can use online samples from the current model, replay buffer samples, or offline dataset samples, then packs them into batches for training.
+
+\subsection{Main environments in the repo}
+There is a general graph building environment, an atom by atom molecule environment, a fragment based molecule environment, and a sequence environment. For this project the molecule and fragment environments are probably the most relevant ones.
+
+\subsection{Main tasks in the repo}
+The simple task is make rings, which is useful just to understand the structure. The sEH fragment task is a more realistic molecule example using a proxy reward model. The QM9 task is another molecule setup using a pretrained property model. There is also a multiobjective sEH task.
+
+\subsection{What matters for my project}
+This repo already gives a GFlowNet training system for discrete molecular generation. The real question for the project is how ChemGymRL should fit into this structure. Most likely the task or reward part will need to change, and possibly the environment too depending on what ChemGymRL state and action space look like.
+
+\section{ChemGymRL notes}
+These are personal notes for myself. Keep them simple.
+
+\subsection{What ChemGymRL is}
+ChemGymRL is not a molecule generator. It is a virtual chemistry lab for reinforcement learning. The agent does chemistry style operations and gets rewards based on how good the experiment outcome is.
+
+\subsection{Big picture}
+The basic idea is that there are vessels, benches, and rewards.
+
+Vessels are containers that hold materials. A material can be a liquid, solvent, solute, reactant, or product.
+
+Bench means a type of experiment station. ChemGymRL has several benches that each do a different kind of lab task.
+
+\subsection{Main benches}
+Reaction bench means trying to turn starting chemicals into desired products. This is the most like doing a reaction in school chemistry, except the agent controls it by taking actions.
+
+Extraction bench means separating materials from a mixture using solvents and layers.
+
+Distillation bench means separating materials by heating and boiling, then collecting what evaporates.
+
+Characterization bench means measuring what is in a vessel rather than changing it.
+
+\subsection{Simple chemistry reminders for myself}
+Reactant means the starting chemical that goes into a reaction.
+
+Product means the chemical made by the reaction.
+
+Solvent means the liquid that other things are dissolved in.
+
+Solute means the thing dissolved in the solvent.
+
+Purity means how much of the stuff in a vessel is the thing I actually want, rather than unwanted material.
+
+Yield means how much of the desired product I end up with.
+
+Spectra means a measurement signal from the material. In ChemGymRL they use things like UV-Vis style spectra as part of the observation.
+
+PVT means pressure, volume, temperature.
+
+\subsection{What the agent actually sees}
+The agent does not just see a molecule graph. It sees observations from vessels, such as spectra, layers, and simple physical values like temperature and volume.
+
+This is important because ChemGymRL is more about controlling a process than directly generating a molecule.
+
+\subsection{What the actions are like}
+In the reaction bench, actions are continuous. That means the agent can choose values on a range, like how much heat to apply or how much of a reactant to add.
+
+In extraction and distillation, the code mostly uses discrete actions. That means the agent picks from a list of preset actions.
+
+\subsection{How reward works}
+Reward is based on the experiment result, not on a molecule graph score.
+
+Usually the reward cares about things like how much target material is present, how pure it is, and sometimes penalties for unwanted material or waste.
+
+So the reward is about what ends up in the vessel.
+
+\subsection{Why this matters for my project}
+The Recursion GFlowNet repo is mainly for discrete graph generation, especially molecules.
+
+ChemGymRL is mainly for lab process control.
+
+So these two are not naturally the same kind of system.
+
+The main question is what object my GFlowNet is supposed to generate.
+
+If the GFlowNet generates molecules, then ChemGymRL would probably be a downstream evaluator or reward source.
+
+If the GFlowNet generates lab procedures, then I would need a much bigger redesign, because the Recursion repo is not built around that kind of state space.
+
+\subsection{Current best guess}
+My current best guess is that ChemGymRL is meant to be used as a downstream environment for evaluation or reward, not as something that directly replaces the graph building environment in the GFlowNet repo.
+
+\subsection{Things I still need to clarify}
+What exactly is the GFlowNet output in this project.
+
+How that output becomes an input to ChemGymRL.
+
+What final scalar reward comes back from ChemGymRL.
+
+Whether the project really wants a molecule generation problem, a lab planning problem, or a mix of both.
 
 \end{document}
