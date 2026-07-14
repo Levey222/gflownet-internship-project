@@ -97,6 +97,50 @@ There is a general graph building environment, an atom by atom molecule environm
 \subsection{Main tasks}
 The simple task is make rings, which is useful just to understand the structure. The sEH fragment task is a more realistic molecule example using a proxy reward model. The QM9 task is another molecule setup using a pretrained property model. There is also a multiobjective sEH task.
 
+\subsection{Initial validation}
+Before running any training tasks, I checked that the local installation passed the lightweight repo tests. I installed \texttt{pytest} and \texttt{pytest-cov} into the project virtual environment and ran the three core test files in \texttt{Coding/recursionpharma-gflownet/tests/}. This allowed the tests to run with the repo's normal \texttt{pytest} configuration, including coverage reporting.
+
+\textit{Note to self: \texttt{pytest} is the Python test runner. \texttt{pytest-cov} is the plugin that measures test coverage, meaning which lines of code were actually executed by the tests.}
+
+\begin{verbatim}
+./Coding/.venv/bin/python -m pytest \
+  Coding/recursionpharma-gflownet/tests/test_subtb.py -q
+
+./Coding/.venv/bin/python -m pytest \
+  Coding/recursionpharma-gflownet/tests/test_graph_building_env.py -q
+
+./Coding/.venv/bin/python -m pytest \
+  Coding/recursionpharma-gflownet/tests/test_envs.py -q
+\end{verbatim}
+
+The results were:
+\begin{itemize}
+    \item \texttt{test\_subtb.py}: 4 tests passed, with coverage reported, in 17.17 seconds
+    \item \texttt{test\_graph\_building\_env.py}: 10 tests passed, with coverage reported, in 13.97 seconds
+    \item \texttt{test\_envs.py}: 5 tests passed, with coverage reported, in 23.78 seconds
+\end{itemize}
+
+These checks do not generate molecules or benchmark plots. They are internal correctness checks for the mathematical loss utilities, graph action categorical logic, and backward-action mask consistency in the graph environments. The coverage report is also useful in a limited sense because it confirms that the tested modules were actually exercised during the run, although these small unit-style checks are not meant to provide broad project-wide coverage. Passing them gives a reasonable first indication that the local GFlowNet installation is in a usable state before moving on to small training runs such as \texttt{make\_rings.py} and later the sEH fragment task.
+
+\textit{Note to self: a unit-style test checks one small part of the code in isolation. A sanity check means a quick run whose purpose is to confirm that the pipeline behaves sensibly before more serious experiments.}
+
+\subsection{First training sanity check}
+After the lightweight tests, I ran a short CPU version of \texttt{make\_rings.py} to check that the training loop, logging, and generated-object database worked end to end. This is a toy task where the reward is based on the number of rings in the generated molecule, so it is useful as a sanity check but not as a realistic chemistry benchmark.
+
+\textit{Note to self: CPU means the run used the main processor rather than a GPU. A training loop is the repeated cycle of sampling trajectories, computing rewards and losses, and updating model weights.}
+
+The run created a standard log directory with a configuration file, a training log, a TensorBoard event file, and a SQLite database of generated objects. From the saved outputs, the main point is that the training pipeline behaved as expected: the loss decreased sharply from its very large initial value, the average sampled reward increased from a low starting point, and the generated-object database was populated throughout the run.
+
+\textit{Note to self: TensorBoard is a tool for viewing training curves such as loss and reward over time. SQLite is a lightweight database stored as a single file.}
+
+The SQLite log stores molecules as SMILES strings together with their rewards. In the inspected snapshot there were thousands of logged samples and over a thousand distinct SMILES strings. Some of the highest-scoring examples were dense polycyclic carbon structures, which is exactly what one would expect when the reward only encourages ring formation. This is useful evidence that the model is responding to the objective.
+
+\textit{Note to self: SMILES is a text format for writing molecular structures as strings. Polycyclic means a structure with multiple connected rings. Distinct SMILES means unique string representations in the logged outputs, not just the total number of sampled molecules including repeats.}
+
+At the same time, these molecules should not be treated as realistic chemical candidates. The task only rewards ring count, so it naturally pushes the policy toward structurally extreme graphs. Some outputs may be processable by RDKit and valid enough for the environment while still being poor models of stable, isolable molecules. For that reason, I treat \texttt{make\_rings.py} as a methodological check of the local GFlowNet implementation rather than as a meaningful chemistry result.
+
+\textit{Note to self: RDKit is the chemistry toolkit used here to represent and process molecules. Isolable means a molecule could exist as a stable enough substance to be separated and handled in practice. Methodological check means the result is mainly evidence that the code and learning procedure work, rather than evidence for a scientific chemistry claim.}
+
 \subsection{What this actually means}
 This repo already gives a GFlowNet training system for discrete molecular generation. The real question for the project is how ChemGymRL should fit into this structure. Most likely the task or reward part will need to change, and possibly the environment too depending on what ChemGymRL state and action space look like.
 
