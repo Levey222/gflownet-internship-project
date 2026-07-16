@@ -137,6 +137,8 @@ The SQLite log stores molecules as SMILES strings together with their rewards. I
 
 \textit{Note to self: SMILES is a text format for writing molecular structures as strings. Polycyclic means a structure with multiple connected rings. Distinct SMILES means unique string representations in the logged outputs, not just the total number of sampled molecules including repeats.}
 
+In the exploratory CPU run I inspected, the TensorBoard log contained 69 recorded training steps. Over that period, the sampled reward average increased from roughly 0.47 at the start to about 4.38 in the later snapshot, while the average trajectory length increased from about 8.6 to about 19.9. The generated-object database contained 4480 logged samples and 1162 distinct SMILES strings at the inspected snapshot, with a mean reward of about 4.41 and a maximum observed reward of 10. These numbers are not meant as a final benchmark result, but they do show that the model was learning to favour higher-ring structures under this toy objective.
+
 At the same time, these molecules should not be treated as realistic chemical candidates. The task only rewards ring count, so it naturally pushes the policy toward structurally extreme graphs. Some outputs may be processable by RDKit and valid enough for the environment while still being poor models of stable, isolable molecules. For that reason, I treat \texttt{make\_rings.py} as a methodological check of the local GFlowNet implementation rather than as a meaningful chemistry result.
 
 \textit{Note to self: RDKit is the chemistry toolkit used here to represent and process molecules. Isolable means a molecule could exist as a stable enough substance to be separated and handled in practice. Methodological check means the result is mainly evidence that the code and learning procedure work, rather than evidence for a scientific chemistry claim.}
@@ -198,7 +200,7 @@ If the GFlowNet generates lab procedures, then I would need a much bigger redesi
 \subsection{Current guess}
 My current best guess is that ChemGymRL is meant to be used as a downstream environment for evaluation or reward, not as something that directly replaces the graph building environment in the GFlowNet repo.
 
-\subsection{Questions for myself}
+\subsection{Questions to ask}
 What exactly is the GFlowNet output in this project.
 
 How that output becomes an input to ChemGymRL.
