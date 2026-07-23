@@ -142,16 +142,16 @@ The SQLite log stores molecules as SMILES strings together with their rewards. I
 
 In the exploratory CPU run I inspected, the TensorBoard log contained 69 recorded training steps. Over that period, the sampled reward average increased from roughly 0.47 at the start to about 4.38 in the later snapshot, while the average trajectory length increased from about 8.6 to about 19.9. The generated-object database contained 4480 logged samples and 1162 distinct SMILES strings at the inspected snapshot, with a mean reward of about 4.41 and a maximum observed reward of 10. These numbers are not meant as a final benchmark result, but they do show that the model was learning to favour higher-ring structures under this toy objective.
 
-At the same time, these molecules should not be treated as realistic chemical candidates. The task only rewards ring count, so it naturally pushes the policy toward structurally extreme graphs. Some outputs may be processable by RDKit and valid enough for the environment while still being poor models of stable, isolable molecules. For that reason, I treat \texttt{make\_rings.py} as a methodological check of the local GFlowNet implementation rather than as a meaningful chemistry result.
+At the same time, these molecules should not be treated as realistic chemical candidates. The task only rewards ring count, so it naturally pushes the policy toward structurally extreme graphs. Some outputs may pass the software checks while still being poor models of stable, isolable molecules. For that reason, I treat \texttt{make\_rings.py} as a methodological check of the local GFlowNet implementation rather than as a meaningful chemistry result.
 
-\textit{Note to self: RDKit is the chemistry toolkit used here to represent and process molecules. Isolable means a molecule could exist as a stable enough substance to be separated and handled in practice. Methodological check means the result is mainly evidence that the code and learning procedure work, rather than evidence for a scientific chemistry claim.}
+\textit{Note to self: Isolable means a molecule could exist as a stable enough substance to be separated and handled in practice. Methodological check means the result is mainly evidence that the code and learning procedure work, rather than evidence for a scientific chemistry claim.}
 
 \subsection{sEH proxy verification}
 The next benchmark is the fragment-based soluble epoxide hydrolase task in \texttt{seh\_frag.py}. This task uses a pretrained message-passing neural network from the original GFlowNet benchmark code as a proxy reward model. The checkpoint is not included when the repo is cloned because its cache directory is excluded by \texttt{.gitignore}. I downloaded it into the cache path expected by the local loader and confirmed that the model loaded as an \texttt{MPNNet}.
 
 \textit{Note to self: sEH means soluble epoxide hydrolase. A proxy model is a fast learned approximation used in place of a more expensive evaluation. A checkpoint stores the numerical weights learned by a neural network. MPNNet means message-passing neural network, a model that processes a molecule as a graph of atoms and bonds.}
 
-I then used the helper script \texttt{scripts/check\_seh\_proxy.py} to score three fixed RDKit molecules. The resulting rewards were:
+I then used the helper script \texttt{scripts/check\_seh\_proxy.py} to score three fixed molecules. The resulting rewards were:
 
 \begin{itemize}
     \item ethanol: 0.003414
@@ -179,8 +179,8 @@ This experiment is conditional because the inverse temperature, written as beta,
 \hline
 Metric & Mean $\pm$ sample standard deviation \\
 \hline
-Early training reward mean & $0.228 \pm 0.010$ \\
-Late training reward mean & $0.671 \pm 0.008$ \\
+Training reward mean, steps 1--10 & $0.228 \pm 0.010$ \\
+Training reward mean, steps 491--500 & $0.671 \pm 0.008$ \\
 Final reward mean & $0.649 \pm 0.066$ \\
 Final reward maximum & $0.923 \pm 0.017$ \\
 Final molecules below reward 0.2 & $7.7 \pm 4.0$ out of 320 \\
@@ -192,13 +192,13 @@ Top-1000 training Tanimoto similarity & $0.185 \pm 0.008$ \\
 \caption{Conditional sEH results across seeds 0, 1, and 2.}
 \end{table}
 
-Mean reward over the first ten training steps was about 0.228, compared with 0.671 over the last ten. Mean TB loss also moved from the initial range of roughly 1500 to 1800 into a much lower but still noisy range. The three final reward means were 0.705, 0.576, and 0.667. This spread is why the result is reported across seeds rather than using only the strongest run.
+Mean reward over steps 1--10 was about 0.228, compared with 0.671 over steps 491--500. Mean TB loss also moved from roughly 1500 to 1800 in steps 1--10 into a much lower but still noisy range in steps 491--500. The three final reward means were 0.705, 0.576, and 0.667. This spread is why the result is reported across seeds rather than using only the strongest run.
 
-All 48000 training molecules, 12000 validation molecules, and 960 final molecules could be parsed by RDKit. Every final set contained 320 unique canonical SMILES and 320 distinct non-empty Bemis-Murcko scaffolds. The average pairwise Tanimoto similarity remained low, while the top-1000 high-reward training molecules were slightly more similar than the full final sets. This suggests some concentration around high proxy reward without exact duplication.
+All 48000 training molecules, 12000 validation molecules, and 960 final molecules passed the post-run molecular parsing check. Every final set contained 320 unique canonical SMILES and 320 distinct non-empty Bemis-Murcko scaffolds. The average pairwise Tanimoto similarity remained low, while the top-1000 high-reward training molecules were slightly more similar than the full final sets. This suggests some concentration around high proxy reward without exact duplication.
 
 \textit{Note to self: Tanimoto similarity compares molecular fingerprints. A higher value means the molecules share more fingerprint features. A Bemis-Murcko scaffold is the main ring-and-linker framework after side groups are removed. Complete scaffold uniqueness means each final molecule had a different extracted framework under this definition. It does not mean every molecule could be synthesised or is biologically active.}
 
-The later trajectories commonly reached the logged maximum length of 26 in all three seeds. This means the policy often used the full available fragment-construction budget. It is a diagnostic to track in the fixed-beta experiments, not proof of a failure by itself.
+During every step from 491 to 500, the logged mean trajectory length was exactly 26 in all three seeds. This means the policy used the full available fragment-construction budget in that window. It is a diagnostic to track in the fixed-beta experiments, not proof of a failure by itself.
 
 These runs show that the local conditional training behaviour is repeatable: reward rises, the specialised TB loss moves to a lower range, and diverse proxy-scored molecules are generated without invalid trajectories. They do not establish convergence, exact sampling proportional to reward, real sEH binding, or a reproduction of the paper. The paper comparison requires separately trained fixed-beta models and a matched TB-versus-Flow-Matching protocol.
 
@@ -212,8 +212,8 @@ I next trained three separate Trajectory Balance models with beta fixed at 4 thr
 \hline
 Metric & Mean $\pm$ sample standard deviation \\
 \hline
-Early training reward mean & $0.214 \pm 0.016$ \\
-Late training reward mean & $0.518 \pm 0.003$ \\
+Training reward mean, steps 1--10 & $0.214 \pm 0.016$ \\
+Training reward mean, steps 491--500 & $0.518 \pm 0.003$ \\
 Final reward mean & $0.518 \pm 0.025$ \\
 Final reward maximum & $0.860 \pm 0.005$ \\
 Final molecules below reward 0.2 & $23.0 \pm 8.7$ out of 320 \\
@@ -225,9 +225,9 @@ Top-1000 training Tanimoto similarity & $0.155 \pm 0.002$ \\
 \caption{Fixed-beta-4 sEH Trajectory Balance results across seeds 0, 1, and 2.}
 \end{table}
 
-Mean reward over the first ten training steps was 0.214, compared with 0.518 over the last ten. Mean TB loss fell from $400.9 \pm 37.5$ in the first ten steps to $8.87 \pm 0.43$ in the last ten. The three final reward means were 0.534, 0.489, and 0.530. All invalid trajectory, log-probability, and loss counters remained zero.
+Mean reward over steps 1--10 was 0.214, compared with 0.518 over steps 491--500. Mean TB loss fell from $400.9 \pm 37.5$ in steps 1--10 to $8.87 \pm 0.43$ in steps 491--500. The three final reward means were 0.534, 0.489, and 0.530. All invalid trajectory, log-probability, and loss counters remained zero.
 
-All 48000 training molecules, 12000 validation molecules, and 960 final molecules could be parsed by RDKit. Each final set contained 320 unique canonical SMILES and 320 distinct non-empty Bemis-Murcko scaffolds. The top-1000 training Tanimoto values were also close across seeds, with a mean of 0.155 and sample standard deviation of 0.002. This indicates repeatable local training behaviour without exact duplication or scaffold collapse under the measured definitions.
+All 48000 training molecules, 12000 validation molecules, and 960 final molecules passed the post-run molecular parsing check. Each final set contained 320 unique canonical SMILES and 320 distinct non-empty Bemis-Murcko scaffolds. The top-1000 training Tanimoto values were also close across seeds, with a mean of 0.155 and sample standard deviation of 0.002. This indicates repeatable local training behaviour without exact duplication or scaffold collapse under the measured definitions.
 
 The fixed-beta models had a lower final reward mean than the earlier conditional models. This is not evidence that fixed-beta training is generally worse. The conditional runs sampled beta values as high as 64, which places more weight on high reward than beta 4. Raw TB losses should not be compared directly across those protocols for the same reason.
 
@@ -240,28 +240,26 @@ This experiment is closer to the fixed-beta setup used in the papers, but it is 
 \label{fig:tb-beta4-reward}
 \end{figure}
 
-Figure~\ref{fig:tb-beta4-reward} shows the reward trend for seed 0. The training reward rises over the run, while the validation points fluctuate around the same general trend. The figure is useful as a run diagnostic, but it does not replace the three-seed table above.
+I included Figure~\ref{fig:tb-beta4-reward} because it makes the seed-0 training trend easier to see than the summary table alone. The training reward rises over the run, although the validation points still move up and down. This is one run, so I use it as a diagnostic rather than as a replacement for the three-seed result.
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\textwidth]{figures/seh_tb_beta4_seed0_early_late_reward.png}
-\caption{Reward distributions for the first and last 320 training molecules from the fixed-beta-4 Trajectory Balance run with seed 0. The distribution moves toward higher proxy rewards by the end of training.}
+\includegraphics[width=\textwidth]{figures/seh_tb_beta4_seed0_steps_1_10_vs_491_500_reward.png}
+\caption{Reward distributions for steps 1--10 and 491--500 of the fixed-beta-4 Trajectory Balance run with seed 0. Each range contains 320 training molecules.}
 \label{fig:tb-beta4-histogram}
 \end{figure}
 
-Figure~\ref{fig:tb-beta4-histogram} gives a second view of the same run. The early mean was 0.202 and the late mean was 0.522 for these two groups of 320 molecules. There is still a broad spread in the late samples. This matters because a GFlowNet is meant to keep a distribution over useful outcomes rather than collapse onto one molecule.
+Figure~\ref{fig:tb-beta4-histogram} is another way of looking at the same run. Mean reward was 0.202 during steps 1--10 and 0.522 during steps 491--500. The samples from steps 491--500 are not all clustered at one value. I think this is worth showing because the aim is not just to find one high-reward molecule.
 
 \section{ChemGymRL integration}
 
 \subsection{Why I changed the integration scope}
 
-ChemGymRL is a virtual chemistry laboratory rather than a general molecular property calculator. Its reactions use materials and kinetic rules that are already registered in the simulator. This means I cannot take an arbitrary molecule from the fragment GFlowNet and ask ChemGymRL how it reacts without first adding new materials and reaction data.
-
-For the first integration I will therefore generate a reaction procedure, not a new molecule. ChemGymRL will run the completed procedure and provide its terminal reward. This is a restricted proof of concept, but it gives the two packages a clear interface that can be tested.
+At first I expected to pass a molecule from the fragment GFlowNet into ChemGymRL. Looking through the code showed that this would not work without adding new materials and kinetic data for every generated molecule. I am therefore starting with a smaller task: the GFlowNet generates a reaction procedure and ChemGymRL returns its final reward.
 
 \subsection{Selected fictional reaction}
 
-I selected \texttt{FictReactBandit-v1}, with \texttt{fict\_I} fixed as the target product. The materials labelled A to I are fictional simulator materials. They should not be read as real compounds. The reaction network is:
+I chose \texttt{FictReactBandit-v1} because one input describes a complete reaction procedure and the environment returns one final result. I fixed \texttt{fict\_I} as the target. The materials labelled A to I are fictional simulator materials, not real compounds. The reaction network is:
 
 \[
 \begin{array}{rcll}
@@ -273,7 +271,7 @@ F + G + H & \longrightarrow & I & \text{target product}
 \end{array}
 \]
 
-The simulator gives the direct route to E a larger pre-exponential rate coefficient than the other four reactions. The procedure must therefore balance the reagent amounts, their addition times, and the temperature. The intended route first forms F, G, and H, which can then form I, while the competing route forms E.
+The route to E has a larger pre-exponential rate coefficient than the other reactions. The procedure must balance temperature, reagent amounts, and addition times so that F, G, and H can form I without producing too much E.
 
 The raw terminal reward is the final amount of I minus the final amount of E:
 
@@ -281,27 +279,19 @@ The raw terminal reward is the final amount of I minus the final amount of E:
 r_{\mathrm{raw}} = n_I - n_E.
 \]
 
-This reward can be negative when a procedure produces more E than I. The bridge keeps this raw value for analysis and applies a monotonic exponential transformation to obtain the positive reward required by the logarithmic GFlowNet training code.
+This score can be negative, but the GFlowNet code needs a positive reward before taking its logarithm. I keep the raw score for comparison and use an exponential transformation for training.
 
 \textit{Note to self: a pre-exponential coefficient is part of the simulated reaction-rate equation. A larger value makes that reaction faster when the other rate terms are equal. Terminal reward means that the simulator returns the task reward only after the full procedure has finished.}
 
 \subsection{What the GFlowNet will generate}
 
-A complete procedure contains nine choices:
+A procedure has nine choices: one temperature, four reagent amounts, and four addition times. The GFlowNet chooses a discrete token for each one, and the integration code converts it into the normalised ChemGymRL value and a named control.
 
-\begin{itemize}
-    \item one temperature setting
-    \item four reagent amounts, one each for A, B, C, and D
-    \item four reagent addition times, one each for A, B, C, and D
-\end{itemize}
-
-The GFlowNet will choose one discrete token at each position. The integration schema then converts the token into the normalised value expected by ChemGymRL and records the named control. The token by itself is not a physical value. Its meaning depends on its position and the saved schema.
-
-The initial plan uses three choices per control, giving \(3^9 = 19{,}683\) possible procedures. The exact timing bins are not yet locked because a normalised timing value of 1 appears to fall after the final usable simulator step. I will test this before running the complete baseline.
+Three choices per control give \(3^9 = 19{,}683\) procedures. I still need to check the timing bins because a normalised value of 1 seems to fall after the final usable simulator step.
 
 \subsection{Terminal reward path}
 
-There is no ChemGymRL reward after each token. The partial sequence only records decisions. Once all nine choices have been made, the integration follows this path:
+The simulator is not called after every token. ChemGymRL runs only after all nine choices are present:
 
 \[
 \text{nine tokens}
@@ -315,24 +305,39 @@ r_{\mathrm{raw}}
 R(x) > 0.
 \]
 
-Trajectory Balance then uses the positive terminal reward \(R(x)\) to train the whole construction trajectory. ChemGymRL supplies the reward, but it does not replace the GFlowNet loss.
+Trajectory Balance uses \(R(x)\) to train the complete sequence. ChemGymRL supplies the reward, but the loss is still the GFlowNet loss.
 
 \subsection{Current implementation status}
 
-I created a separate package at \texttt{Coding/chemgymrl\_gflownet}. Keeping the bridge outside both cloned repositories makes it clear which code belongs to this project. The bridge checks the nine-token input, converts it into the ChemGymRL action vector, runs \texttt{FictReactBandit-v1}, stores the raw and positive rewards, and caches repeated deterministic procedures.
+So far, I have built the bridge, not the full GFlowNet task. The separate \texttt{Coding/chemgymrl\_gflownet} package converts tokens, runs the simulator, stores both reward forms, and caches repeated procedures. Its seven project tests pass. Three related ChemGymRL reaction tests also pass, while the upstream bandit-specific tests are unimplemented placeholders.
 
-The project-owned bridge tests currently pass seven tests. They cover token decoding, invalid input, repeated simulation, cache use, and the positive reward transformation. Three related upstream reaction tests also pass. The upstream bandit-specific test names are placeholders that raise \texttt{NotImplementedError}, so I do not count them as successful bandit tests.
-
-As a speed and reward-range check, I ran 2,000 random continuous procedures. They took about 10.08 seconds, or roughly 198 simulations per second. Raw rewards ranged from about -0.6985 to 0.1126 and most were negative. This confirms that the simulator is fast and that the reward is not constant. It is not yet a GFlowNet training result, so there is no ChemGymRL training plot to report at this stage.
+I also ran 2,000 random continuous procedures. They took 10.08 seconds and produced raw rewards from about -0.6985 to 0.1126. This is only a speed and reward-range check, not a GFlowNet result.
 
 \subsection{Planned experiment}
 
-The three-choice space is small enough to enumerate. I will first simulate all 19,683 procedures and calculate the exact reward-proportional target distribution. I can then train the sequence GFlowNet and compare its learned distribution with the exact one, rather than only checking whether its average reward rises.
+I will first simulate all 19,683 procedures to obtain the exact reward-proportional distribution. I can then train the sequence GFlowNet and compare its distribution with this reference.
 
-This first experiment is a correctness test, not an efficiency claim. If it works, I will increase the number of choices per control and consider a second environment where the nine controls can be assigned in different orders. That version would allow several construction trajectories to reach the same completed procedure, which is a more representative test of GFlowNet flow balance.
+This is a correctness test, not an efficiency claim. If it works, I can add more choices and later allow the controls to be assigned in different orders, giving several paths to the same procedure.
 
 \subsection{Limitations}
 
-The selected reaction is fictional and does not represent toxin neutralisation. It also does not show that ChemGymRL can evaluate arbitrary molecules generated by the molecular GFlowNet. The result will only show whether a GFlowNet can generate discrete procedures and learn from a ChemGymRL terminal reward under a controlled simulator setup.
+This fictional reaction is not toxin neutralisation and it does not test arbitrary generated molecules. It only tests whether a GFlowNet can learn discrete procedures from a ChemGymRL terminal reward.
+
+\section{My next steps}
+
+\textit{Working notes for myself:}
+
+\begin{enumerate}
+    \item Check the reagent timing code first. In particular, find out whether a timing value of 1 means a late addition or no addition at all. Do not train anything until this mapping is clear.
+    \item Write down one fixed procedure schema. It needs the token order, the value represented by each token, the physical meaning of each control, the ChemGymRL environment, and the target product.
+    \item Run all 19,683 three-choice procedures. Save the token sequence, decoded procedure, raw ChemGymRL score, and positive training reward for every one.
+    \item Use this complete baseline to see what the reward distribution actually looks like. Check whether the exponential transformation is sensible or whether it puts nearly all the probability on a few procedures.
+    \item Build the nine-step sequence GFlowNet. The first eight partial states do not receive ChemGymRL rewards. After the ninth token, run the whole reaction once and use the result as the terminal reward.
+    \item Keep the two reward values separate. The raw score, amount of I minus amount of E, is what I use to explain the simulator result. The positive transformed value is only what the GFlowNet needs for training.
+    \item Run the unit tests and then a five-step training smoke test. Check that every sampled procedure has exactly nine tokens, reaches ChemGymRL, returns a finite reward, and uses the existing Trajectory Balance loss.
+    \item Train one proper seed before starting several runs. Compare the learned procedure distribution with the exact distribution and with random sampling under the same number of simulator calls.
+    \item Only scale the experiment if the small version works. The next options are more values per control or allowing the controls to be chosen in different orders.
+    \item Be careful with the final claim. This first result is about connecting a GFlowNet to a terminal reward from ChemGymRL. It is not yet a real chemistry or toxin-neutralisation result.
+\end{enumerate}
 
 \end{document}
