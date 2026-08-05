@@ -91,6 +91,20 @@ s dsdsd
     \item \textbf{Remaining problem:} Existing work covers molecular generation, reaction-aware construction, tail-aware flow models, and simulated chemistry separately. The literature reviewed so far does not show whether simulator-derived terminal rewards can help a Trajectory-Balance GFlowNet represent rare high-reward procedures accurately while retaining diversity.
 \end{itemize}
 
+\subsection{Tail sampling papers to write about}
+
+\textit{Short notes for now. Add proper references and compare the experimental settings before turning these into report paragraphs.}
+
+\begin{itemize}
+    \item \textbf{Shen et al. (2023), Towards Understanding and Improving GFlowNet Training:} This is the closest paper to the replay test here. It uses prioritised replay from a high-reward percentile to help an under-trained GFlowNet match its target distribution with fewer new reward evaluations. My buffer is simpler because it keeps any procedure with raw reward above zero.
+    \item \textbf{Wang et al. (2026), Efficient Tail-Aware Generative Optimization via Flow Model Fine-Tuning:} This paper separates average reward from upper-tail discovery and lower-tail reliability. It uses VaR and CVaR to fine-tune continuous flow and diffusion models. It is useful for the problem and the measurements, but its method is not a GFlowNet algorithm.
+    \item \textbf{Kim et al. (2024), Local Search GFlowNets:} The model generates a complete trajectory, backtracks part of it, and reconstructs a possibly better result. The improved trajectories are reused for training, giving the model more high-reward examples without relying only on fresh samples from the starting state.
+    \item \textbf{Kim et al. (2024), Genetic-guided GFlowNets:} A genetic algorithm searches for stronger molecules and its results are put into a rank-weighted replay buffer. This shows how off-policy examples can reduce expensive reward calls, although some of the improvement comes from the separate genetic search method.
+    \item \textbf{Madan et al. (2025), Sibling Augmented GFlowNets:} A second network explores using an intrinsic reward while the main network continues learning the required reward-proportional distribution. This is aimed at sparse terminal rewards, but it is more complicated than the replay method used here.
+    \item \textbf{Dall'Antonia et al. (2026), Avoid What You Know:} Adaptive Complementary Exploration uses another GFlowNet to seek valuable regions which the main sampler currently under-represents. This is directly related to finding a rare upper tail without repeatedly revisiting modes which are already learned.
+    \item \textbf{Wang et al. (2026), RapTB with Submodular Replay:} RapTB gives stronger learning signals to early prefixes, while Submodular Replay chooses a mixture intended to retain both reward and diversity. The diversity part is relevant to my result because positive-only replay improved the tail but produced too many repeated procedures.
+\end{itemize}
+
 \section{Repo notes}
 
 \subsection{What this repo is}
