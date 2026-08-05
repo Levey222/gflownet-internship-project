@@ -137,28 +137,28 @@ There is a general graph building environment, an atom by atom molecule environm
 \subsection{Main tasks}
 The simple task is make rings, which is useful just to understand the structure. The sEH fragment task is a more realistic molecule example using a proxy reward model. The QM9 task is another molecule setup using a pretrained property model. There is also a multiobjective sEH task.
 
-\subsection{Initial validation}
-Before running any training tasks, I checked that the local installation passed the lightweight repo tests. I installed \texttt{pytest} and \texttt{pytest-cov} into the project virtual environment and ran the three core test files in \texttt{Coding/recursionpharma-gflownet/tests/}. This allowed the tests to run with the repo's normal \texttt{pytest} configuration, including coverage reporting.
+% \subsection{Initial validation}
+% Before running any training tasks, I checked that the local installation passed the lightweight repo tests. I installed \texttt{pytest} and \texttt{pytest-cov} into the project virtual environment and ran the three core test files in \texttt{Coding/recursionpharma-gflownet/tests/}. This allowed the tests to run with the repo's normal \texttt{pytest} configuration, including coverage reporting.
 
-\textit{Note to self: \texttt{pytest} is the Python test runner. \texttt{pytest-cov} is the plugin that measures test coverage, meaning which lines of code were actually executed by the tests.}
+% \textit{Note to self: \texttt{pytest} is the Python test runner. \texttt{pytest-cov} is the plugin that measures test coverage, meaning which lines of code were actually executed by the tests.}
 
-\begin{verbatim}
-./Coding/.venv/bin/python -m pytest \
-  Coding/recursionpharma-gflownet/tests/test_subtb.py -q
+% \begin{verbatim}
+% ./Coding/.venv/bin/python -m pytest \
+%   Coding/recursionpharma-gflownet/tests/test_subtb.py -q
 
-./Coding/.venv/bin/python -m pytest \
-  Coding/recursionpharma-gflownet/tests/test_graph_building_env.py -q
+% ./Coding/.venv/bin/python -m pytest \
+%   Coding/recursionpharma-gflownet/tests/test_graph_building_env.py -q
 
-./Coding/.venv/bin/python -m pytest \
-  Coding/recursionpharma-gflownet/tests/test_envs.py -q
-\end{verbatim}
+% ./Coding/.venv/bin/python -m pytest \
+%   Coding/recursionpharma-gflownet/tests/test_envs.py -q
+% \end{verbatim}
 
-The results were:
-\begin{itemize}
-    \item \texttt{test\_subtb.py}: 4 tests passed, with coverage reported, in 17.17 seconds
-    \item \texttt{test\_graph\_building\_env.py}: 10 tests passed, with coverage reported, in 13.97 seconds
-    \item \texttt{test\_envs.py}: 5 tests passed, with coverage reported, in 23.78 seconds
-\end{itemize}
+% The results were:
+% \begin{itemize}
+%     \item \texttt{test\_subtb.py}: 4 tests passed, with coverage reported, in 17.17 seconds
+%     \item \texttt{test\_graph\_building\_env.py}: 10 tests passed, with coverage reported, in 13.97 seconds
+%     \item \texttt{test\_envs.py}: 5 tests passed, with coverage reported, in 23.78 seconds
+% \end{itemize}
 
 Before the repeated sEH experiments, I ran the complete test suite again after adding a small direct check of the Trajectory Balance loss. The new check supplies known forward log-probabilities, backward log-probabilities, reward, and log (Z) to the production loss function. A balanced example must give zero loss, while a known offset must give the corresponding squared residual. A second check confirms that selecting \texttt{TB} creates the Trajectory Balance implementation rather than a generic reinforcement-learning objective. The complete result was 22 tests passed in 12.43 seconds. Overall code coverage was 22\%, so passing this suite should not be interpreted as verification of every path in the repository.
 
