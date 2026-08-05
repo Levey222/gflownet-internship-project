@@ -91,13 +91,13 @@ s dsdsd
     \item \textbf{Remaining problem:} Existing work covers molecular generation, reaction-aware construction, tail-aware flow models, and simulated chemistry separately. The literature reviewed so far does not show whether simulator-derived terminal rewards can help a Trajectory-Balance GFlowNet represent rare high-reward procedures accurately while retaining diversity.
 \end{itemize}
 
-\subsection{Replay paper used for this experiment}
+\subsection{Papers informing the replay and tail experiments}
 
 \textit{Short notes for now. Add the proper reference and compare the experimental settings before turning this into a report paragraph.}
 
-\begin{itemize}
-    \item \textbf{Shen et al. (2023), Towards Understanding and Improving GFlowNet Training:} This is the closest paper to the replay test here. It uses prioritised replay from a high-reward percentile to help an under-trained GFlowNet match its target distribution with fewer new reward evaluations. My buffer is simpler because it keeps any procedure with raw reward above zero.
-\end{itemize}
+\textbf{Shen et al. (2023), Towards Understanding and Improving GFlowNet Training.} This is the closest paper to the replay test used here. The paper points out that a GFlowNet can have the correct target in theory but still learn it slowly with finite training. Their reward-prioritised replay method stores all terminal objects seen so far. Half of an extra replay batch is sampled from the top 10 per cent by reward and half from the remaining 90 per cent, then backward trajectories are sampled for those stored terminal objects before the loss is applied. This improved sample efficiency on several tasks, although it did not improve every final converged result. My current test is simpler: it stores only procedures with raw reward above zero, samples them uniformly, and adds eight of them to the 32 new trajectories in one update. It is inspired by the paper rather than a reproduction of its method.
+
+\textbf{Wang et al. (2026), Efficient Tail-Aware Generative Optimization via Flow Model Fine-Tuning.} This paper asks how a generative model can improve rare high-reward results in the upper tail instead of only improving its average reward. It uses Value-at-Risk to set a tail threshold and Conditional Value-at-Risk to measure the average result beyond that threshold. Its fine-tuning method gives extra emphasis to results above the threshold while regularisation limits how far the new model moves from the original model. The molecular experiment shows how average reward, upper-tail quality and validity can be assessed separately. The method was made for continuous flow and diffusion models, not GFlowNets, so its loss cannot just be copied into this project. I am using its problem statement and measurements to plan a GFlowNet experiment with ChemGymRL terminal rewards. For the current finite task, a fixed top-$k$ tail may be clearer than a quantile because many procedures have exactly zero raw reward.
 
 \section{Repo notes}
 
@@ -295,6 +295,17 @@ Figure~\ref{fig:tb-beta4-histogram} is another way of looking at the same run. M
 \caption{No-replay and positive-replay results across matched seeds 0, 17, and 42. Bars show the mean and error bars show the sample standard deviation across the three seeds. Dashed lines show the exact target value, or the expected value from 1024 direct target samples where appropriate.}
 \label{fig:chemgymrl-replay-summary}
 \end{figure}
+
+\textit{What the plotted measurements mean:}
+
+\begin{itemize}
+    \item Mean raw reward is the average terminal result returned by ChemGymRL, before it is converted into the strictly positive reward used by the GFlowNet. A higher value is better in this test, but the mean alone does not show where the samples are concentrated.
+    \item Positive fraction is the percentage of final samples whose raw terminal reward is greater than zero.
+    \item Reward-category total-variation error compares the generated proportions of negative, zero, and positive procedures with those proportions in the exact reward-proportional target. Zero would be a perfect category-level match, while a larger value means a worse match. It is quite a rough measurement because it does not compare individual procedures within each category.
+    \item Top-100 fraction is the percentage of the 1024 final samples that belong to the 100 highest-raw-reward procedures in the complete test space. Repeated samples are counted each time, so this can rise because the model repeatedly generates the same few procedures.
+    \item Exact target mass covered adds together the exact target probabilities of the unique procedures found in the final sample. It measures how much of the target distribution's support was reached. Generating the same procedure again does not increase this value.
+    \item Unique procedures is the number of different complete nine-token sequences among the 1024 final samples. These are control procedures, not 1024 different molecules. A high value means fewer repeats, but is not automatically good if most of the procedures have zero reward.
+\end{itemize}
 
 \begin{itemize}
     \item The small test space contains $3^9=19683$ complete procedures. The GFlowNet chooses nine control tokens, then ChemGymRL runs the complete procedure and supplies the terminal outcome.
