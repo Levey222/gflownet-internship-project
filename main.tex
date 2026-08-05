@@ -11,6 +11,20 @@
 
 \maketitle
 
+\section{Planned literature review structure}
+\begin{itemize}
+    \item \textbf{Scientific generative design:} In many scientific design problems there is not one obviously correct answer. It may be more useful to produce several unusual but strong candidates than one result with a good average score.
+    \item \textbf{GFlowNet foundations:} A GFlowNet builds an object through a sequence of small decisions and aims to sample completed objects in proportion to their reward. The forward and backward policies are linked by flow-balance conditions, which makes the method different from ordinary reward-maximising reinforcement learning.
+    \item \textbf{Training objectives:} Flow Matching and Detailed Balance work with local states or transitions, while Trajectory Balance compares a complete construction path with its terminal reward. This section should also cover sparse rewards, credit assignment, exploration, and the fact that a correct equation can still be learned poorly in a finite run.
+    \item \textbf{Tail-aware generation:} Raising reward concentration can move probability away from poor samples, but it does not prove that rare high-reward samples have been learned. Tail learning concerns whether the model represents that rare region properly, while tail shaping deliberately changes how much probability the region should receive.
+    \item \textbf{Tail measurements:} Value-at-Risk gives a reward threshold at a chosen quantile, and CVaR summarises the rewards beyond that threshold. These values should be reported alongside fixed top-k coverage and diversity, because a model could obtain a strong tail score by repeating only a few samples.
+    \item \textbf{GFlowNet tail difficulties:} A rare terminal state cannot teach the model much if it is almost never generated during training. Replay, off-policy trajectories, reward tempering, or a gradual curriculum may expose the model to these states, although too much emphasis can reduce diversity.
+    \item \textbf{Molecular GFlowNets:} The original sEH example uses a learned molecular property proxy, while newer work also considers biological sequences, reaction templates, and purchasable building blocks. These methods can improve diversity or synthesizability, but a proxy score is still not the same as carrying out an experiment.
+    \item \textbf{Molecular tail assessment:} Reward histograms and inverse cumulative distribution plots can show whether a model improves the unusual high-reward end rather than only its mean. Validity, synthetic accessibility, structural diversity, and repeated generation should be checked before treating a high score as a useful molecular result.
+    \item \textbf{ChemGymRL:} ChemGymRL provides simulated reaction procedures in which actions alter a chemical state and a completed procedure receives an outcome. It is useful as a controlled evaluator, but it only understands the materials, reactions, and controls defined in each environment.
+    \item \textbf{Research gap and question:} The project can examine whether a simulator-derived terminal reward is enough for a Trajectory-Balance GFlowNet to learn rare high-reward procedures. The main question is whether upper-tail coverage can improve without losing validity, diversity, or the wider reward distribution.
+\end{itemize}
+
 \section{Overview}
 Generative modelling in discrete, compositional space represents a challenge in machine learning, particularly when applied to domains requiring complex structural design such as molecular discovery or graph generation. Traditional deep learning paradigms such as Reinforcement Learning (RL) frequently struggle in these environments, due to their optimisation for reward maximisation. In these settings, standard RL is usually not designed to sample a diverse set of high-reward solutions in proportion to reward, which is often important in real-world applications.
 To resolve this limitation, Generative Flow Networks (GFlowNets) have emerged as a probabilistic framework that uses step-by-step object construction through a network of flow conservation. Formally, GFlowNets are modelled as Directed Acyclic Graphs, with the core objective not to maximise a reward function $R(x)$, but rather to sample terminal objects proportional to it. By ensuring that the probability of generating any given completed structure satisfies $P(x) \propto R(x)$ (derived from Boltzmann and setting 'energy as log' -> maybe expand), GFlowNets preserve diversity during exploration and actively reveal high-reward results.
@@ -65,6 +79,17 @@ Again, the probabilities have now been replaced by probability densities. This i
 "" This is the GFlowNet equivalent of a Path Integral (similar to quantum mechanics). It shows that for any continuous trajectory curved through space, the product of the continuous forward action densities, scaled by the universe's total volume \(Z\), matches the terminal boundary condition \(R(x)\) scaled by the reverse path density."" - not written by me, assess this later
 
 s dsdsd
+
+\section{Current research and remaining limitations}
+\begin{itemize}
+    \item \textbf{Early molecular GFlowNets:} The original molecular work built molecules from fragments and used a learned sEH property proxy as the reward. It showed that a GFlowNet could generate several high-scoring structures, but the score was a prediction rather than a laboratory result.
+    \item \textbf{Improved training methods:} Later work introduced Trajectory Balance to improve credit assignment across complete construction paths. Other research has considered local credit, incomplete trajectories, and generalisation to states which were not well represented during training.
+    \item \textbf{Biological and molecular design:} GFlowNets have been used to propose biological sequences and molecular candidates where producing a varied batch is useful. These methods still depend on the quality of the property model or utility function used to score each candidate.
+    \item \textbf{Reaction-aware generation:} SynFlowNet, RGFN, and TRACE-GFN include reaction templates, purchasable building blocks, or learned reaction models in the generation process. This improves synthetic feasibility, but it does not guarantee that a proposed reaction will work as expected in a physical experiment.
+    \item \textbf{Tail-aware generation:} Recent work on continuous flow and diffusion models has examined how to improve rare high-reward samples rather than only increasing mean reward. This gives a useful problem statement and assessment method, although the published implementation is not a GFlowNet method and cannot be transferred directly.
+    \item \textbf{Digital chemistry:} ChemGymRL provides simulated reaction, extraction, and distillation environments and has mainly been tested with standard reinforcement-learning agents. It can evaluate procedures supported by a defined environment, but it cannot infer arbitrary unknown chemistry.
+    \item \textbf{Remaining problem:} Existing work covers molecular generation, reaction-aware construction, tail-aware flow models, and simulated chemistry separately. The literature reviewed so far does not show whether simulator-derived terminal rewards can help a Trajectory-Balance GFlowNet represent rare high-reward procedures accurately while retaining diversity.
+\end{itemize}
 
 \section{Repo notes}
 
@@ -250,5 +275,44 @@ I included Figure~\ref{fig:tb-beta4-reward} because it makes the seed-0 training
 \end{figure}
 
 Figure~\ref{fig:tb-beta4-histogram} is another way of looking at the same run. Mean reward was 0.202 during steps 1--10 and 0.522 during steps 491--500. The samples from steps 491--500 are not all clustered at one value. I think this is worth showing because the aim is not just to find one high-reward molecule.
+
+\clearpage
+\section{ChemGymRL procedure experiment: working notes}
+
+\textit{These are short notes for myself, not the finished report section. They are here so I remember what the plots show and what needs to be explained properly later.}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/chemgymrl_three_seed_replay_summary.png}
+\caption{No-replay and positive-replay results across matched seeds 0, 17, and 42. Bars show the mean and error bars show the sample standard deviation across the three seeds. Dashed lines show the exact target value, or the expected value from 1024 direct target samples where appropriate.}
+\label{fig:chemgymrl-replay-summary}
+\end{figure}
+
+\begin{itemize}
+    \item The small test space contains $3^9=19683$ complete procedures. The GFlowNet chooses nine control tokens, then ChemGymRL runs the complete procedure and supplies the terminal outcome.
+    \item The comparison is standard Trajectory Balance against a simple positive-replay version. Each arm used 1000 training steps, 32 new simulator evaluations per step, and 1024 final samples.
+    \item Replay adds eight stored positive-reward trajectories to each training update. The number of new ChemGymRL calls is matched, but replay does a little more neural-network training work.
+    \item No replay produced only $1.07\% \pm 0.26\%$ positive procedures. Replay produced $36.43\% \pm 4.54\%$, while the exact reward-proportional target is $26.81\%$.
+    \item Replay reduced reward-category total-variation error from $0.261 \pm 0.009$ to $0.103 \pm 0.048$. Exact target-mass coverage also rose from about $5.06\%$ to $21.52\%$, close to the $22.47\%$ direct-target expectation.
+    \item The drawback is concentration. Replay produced about $798 \pm 43$ unique procedures and $22.04\% \pm 4.22\%$ duplicates. Direct target sampling would be expected to give about 864 unique procedures and $15.66\%$ duplicates.
+    \item High uniqueness without replay is not automatically good. Most of those samples are spread across the large zero-reward plateau rather than matching the target distribution.
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/chemgymrl_three_seed_training_comparison.png}
+\caption{Training curves and final reward summaries for the three matched no-replay and replay-size-8 pairs. The dashed line in the partition plot is the exact log partition for the finite procedure space.}
+\label{fig:chemgymrl-replay-training}
+\end{figure}
+
+\begin{itemize}
+    \item The loss and log-partition curves are fairly repeatable across seeds, but similar loss curves do not mean the final procedure distributions are equally good.
+    \item Raw losses should not be ranked directly because no replay trains on 32 new trajectories, while replay trains on the same 32 plus eight stored trajectories.
+    \item The direction of the replay effect appears in all three seed pairs. This is still a small descriptive result with $n=3$, not a formal significance test.
+    \item The result supports high-reward replay as a way to escape the zero-reward plateau, but the positive-only rule overshoots the upper tail and repeats procedures too often.
+    \item When writing this properly, explain that the replay idea is based on reward-prioritised GFlowNet replay from Shen et al., but this fixed positive-threshold version is my simplified experiment rather than an exact reproduction.
+    \item Main limitation: this is the finite fictitious ChemGymRL environment. It tests the GFlowNet-to-simulator method, not realistic reaction discovery or general chemical validity.
+    \item Possible next comparison: mix replay across reward percentiles or reward bands instead of keeping only positive results, then test whether target matching improves without losing the tail.
+\end{itemize}
 
 \end{document}
