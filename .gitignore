@@ -1,0 +1,30 @@
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
+.venv/
+__pycache__/
+*.pyc
+
+# Local workspace state
+/.local/
+/.coverage
+/main.pdf
+
+# Downloaded references and upstream working clones
+/Papers/
+/Coding/recursionpharma-gflownet/
+/Coding/chemgymrl/
+
+# Local environments, caches, and generated experiment output
+/Coding/.venv/
+**/.pytest_cache/
+/Coding/chemgymrl_gflownet/logs/
+/Coding/chemgymrl_gflownet/results/

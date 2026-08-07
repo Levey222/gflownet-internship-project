@@ -1,0 +1,15 @@
+# Core dependency list based on chemgymrl requirements.txt
+# Recommended Python version: 3.10 or 3.11
+
+gymnasium
+numpy
+matplotlib>=3.6
+cmocean
+pyyaml
+scipy
+numba
+pillow
+pandas
+
+# Optional but useful if running the repo's RL training scripts
+stable-baselines3

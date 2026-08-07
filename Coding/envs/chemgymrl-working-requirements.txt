@@ -1,0 +1,9 @@
+# Pinned ChemGymRL dependencies tested with the shared Python 3.10 environment.
+# Install ChemGymRL itself afterwards with:
+# python -m pip install -e Coding/chemgymrl
+
+gymnasium==0.29.1
+cmocean==4.0.3
+numba==0.66.0
+llvmlite==0.48.0
+
