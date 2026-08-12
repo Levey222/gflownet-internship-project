@@ -1,4 +1,4 @@
-"""Positive-reward replay support for the ChemGymRL procedure task."""
+"""Replay strategies for the ChemGymRL procedure task."""
 
 from __future__ import annotations
 
@@ -11,6 +11,20 @@ from gflownet.config import Config
 from gflownet.data.data_source import DataSource
 from gflownet.data.replay_buffer import ReplayBuffer, detach_and_cpu
 from gflownet.utils.misc import get_worker_rng
+
+
+def _format_sampled_entries(selected: list[tuple]):
+    output = list(zip(*selected))
+    for index in range(len(output)):
+        if all(isinstance(value, np.ndarray) for value in output[index]):
+            output[index] = np.stack(output[index], axis=0)
+        elif all(isinstance(value, torch.Tensor) for value in output[index]):
+            output[index] = torch.stack(output[index], dim=0)
+        else:
+            output[index] = list(output[index])
+    for trajectory in output[0]:
+        trajectory["is_online"] = False
+    return output
 
 
 class PositiveRewardReplayBuffer(ReplayBuffer):
@@ -44,17 +58,7 @@ class PositiveRewardReplayBuffer(ReplayBuffer):
             raise ValueError("cannot sample from an empty replay buffer")
         indexes = get_worker_rng().choice(len(source), batch_size)
         selected = [deepcopy(source[index]) for index in indexes]
-        output = list(zip(*selected))
-        for index in range(len(output)):
-            if all(isinstance(value, np.ndarray) for value in output[index]):
-                output[index] = np.stack(output[index], axis=0)
-            elif all(isinstance(value, torch.Tensor) for value in output[index]):
-                output[index] = torch.stack(output[index], dim=0)
-            else:
-                output[index] = list(output[index])
-        for trajectory in output[0]:
-            trajectory["is_online"] = False
-        return output
+        return _format_sampled_entries(selected)
 
     def _push_fallback(self, entry: tuple) -> None:
         if len(self.fallback_buffer) < self.capacity:
@@ -62,6 +66,77 @@ class PositiveRewardReplayBuffer(ReplayBuffer):
         else:
             self.fallback_buffer[self.fallback_position] = entry
         self.fallback_position = (self.fallback_position + 1) % self.capacity
+
+
+class PercentileMixedReplayBuffer(ReplayBuffer):
+    """Sample equally from the highest-reward rank group and its complement."""
+
+    def __init__(
+        self,
+        cfg: Config,
+        top_fraction: float = 0.1,
+        top_sample_fraction: float = 0.5,
+    ) -> None:
+        super().__init__(cfg)
+        if not 0 < top_fraction < 1:
+            raise ValueError("top_fraction must be between 0 and 1")
+        if not 0 < top_sample_fraction < 1:
+            raise ValueError("top_sample_fraction must be between 0 and 1")
+        self.top_fraction = top_fraction
+        self.top_sample_fraction = top_sample_fraction
+        self.total_seen = 0
+        self.total_retained = 0
+        self.last_top_pool_size = 0
+        self.last_remainder_pool_size = 0
+        self.last_top_sample_count = 0
+        self.last_remainder_sample_count = 0
+        self.last_cutoff_raw_reward = float("nan")
+
+    def push(self, *args) -> None:
+        if len(args) != 5:
+            raise ValueError("replay entries must contain trajectory, reward, properties, conditioning, and validity")
+        self.total_seen += 1
+        if not bool(args[4]):
+            return
+        super().push(*args)
+        self.total_retained += 1
+
+    def sample(self, batch_size: int):
+        if not self.buffer:
+            raise ValueError("cannot sample from an empty replay buffer")
+        if batch_size < 1:
+            raise ValueError("batch_size must be positive")
+
+        rng = get_worker_rng()
+        rewards = np.asarray([float(entry[2][1]) for entry in self.buffer])
+        shuffled_indexes = rng.permutation(len(self.buffer))
+        ranked_indexes = shuffled_indexes[
+            np.argsort(-rewards[shuffled_indexes], kind="stable")
+        ]
+        top_pool_size = max(1, int(np.ceil(len(self.buffer) * self.top_fraction)))
+        top_pool = ranked_indexes[:top_pool_size]
+        remainder_pool = ranked_indexes[top_pool_size:]
+
+        top_sample_count = int(round(batch_size * self.top_sample_fraction))
+        top_sample_count = min(max(top_sample_count, 1), batch_size)
+        remainder_sample_count = batch_size - top_sample_count
+        if not len(remainder_pool):
+            top_sample_count = batch_size
+            remainder_sample_count = 0
+
+        selected_indexes = list(rng.choice(top_pool, top_sample_count))
+        if remainder_sample_count:
+            selected_indexes.extend(
+                rng.choice(remainder_pool, remainder_sample_count).tolist()
+            )
+        selected = [deepcopy(self.buffer[index]) for index in selected_indexes]
+
+        self.last_top_pool_size = len(top_pool)
+        self.last_remainder_pool_size = len(remainder_pool)
+        self.last_top_sample_count = top_sample_count
+        self.last_remainder_sample_count = remainder_sample_count
+        self.last_cutoff_raw_reward = float(rewards[top_pool].min())
+        return _format_sampled_entries(selected)
 
 
 class OfflineFirstDataSource(DataSource):

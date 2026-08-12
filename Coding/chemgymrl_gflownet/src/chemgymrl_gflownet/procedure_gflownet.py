@@ -25,7 +25,11 @@ from gflownet.online_trainer import StandardOnlineTrainer
 from gflownet.utils.conditioning import TemperatureConditional
 
 from .bridge import ACTION_DIMENSION, DEFAULT_REWARD_SCALE, FictReactProcedureBridge
-from .replay import OfflineFirstDataSource, PositiveRewardReplayBuffer
+from .replay import (
+    OfflineFirstDataSource,
+    PercentileMixedReplayBuffer,
+    PositiveRewardReplayBuffer,
+)
 
 
 class ProcedureSequenceContext(AutoregressiveSeqBuildingContext):
@@ -145,13 +149,21 @@ class ChemGymRLProcedureTrainer(StandardOnlineTrainer):
         reward_scale: float = DEFAULT_REWARD_SCALE,
         control_bins: Sequence[Sequence[float]] | None = None,
         positive_replay: bool = False,
+        mixed_replay: bool = False,
         replay_raw_reward_threshold: float = 0.0,
+        mixed_replay_top_fraction: float = 0.1,
+        mixed_replay_top_sample_fraction: float = 0.5,
         print_config: bool = True,
     ) -> None:
+        if positive_replay and mixed_replay:
+            raise ValueError("positive replay and mixed replay are mutually exclusive")
         self.reward_scale = reward_scale
         self.control_bins = control_bins
         self.positive_replay = positive_replay
+        self.mixed_replay = mixed_replay
         self.replay_raw_reward_threshold = replay_raw_reward_threshold
+        self.mixed_replay_top_fraction = mixed_replay_top_fraction
+        self.mixed_replay_top_sample_fraction = mixed_replay_top_sample_fraction
         super().__init__(config, print_config=print_config)
 
     def set_default_hps(self, cfg: Config) -> None:
@@ -217,9 +229,17 @@ class ChemGymRLProcedureTrainer(StandardOnlineTrainer):
                 self.cfg,
                 raw_reward_threshold=self.replay_raw_reward_threshold,
             )
+        elif self.mixed_replay:
+            if not self.cfg.replay.use:
+                raise ValueError("mixed replay requires config.replay.use")
+            self.replay_buffer = PercentileMixedReplayBuffer(
+                self.cfg,
+                top_fraction=self.mixed_replay_top_fraction,
+                top_sample_fraction=self.mixed_replay_top_sample_fraction,
+            )
 
     def build_training_data_loader(self):
-        if not self.positive_replay:
+        if not (self.positive_replay or self.mixed_replay):
             return super().build_training_data_loader()
 
         model = self._wrap_for_mp(self.sampling_model)
@@ -247,7 +267,10 @@ class ChemGymRLProcedureTrainer(StandardOnlineTrainer):
 
     def train_batch(self, batch, epoch_idx: int, batch_idx: int, train_it: int):
         info = super().train_batch(batch, epoch_idx, batch_idx, train_it)
-        if isinstance(self.replay_buffer, PositiveRewardReplayBuffer):
+        if isinstance(
+            self.replay_buffer,
+            (PositiveRewardReplayBuffer, PercentileMixedReplayBuffer),
+        ):
             offline_raw_rewards = batch.obj_props[: batch.num_offline, 1]
             info.update(
                 {
@@ -255,6 +278,16 @@ class ChemGymRLProcedureTrainer(StandardOnlineTrainer):
                     "replay_retained": self.replay_buffer.total_retained,
                     "replay_raw_reward_avg": offline_raw_rewards.mean().item(),
                     "replay_positive_fraction": (offline_raw_rewards > 0).float().mean().item(),
+                }
+            )
+        if isinstance(self.replay_buffer, PercentileMixedReplayBuffer):
+            info.update(
+                {
+                    "replay_top_pool_size": self.replay_buffer.last_top_pool_size,
+                    "replay_remainder_pool_size": self.replay_buffer.last_remainder_pool_size,
+                    "replay_top_sample_count": self.replay_buffer.last_top_sample_count,
+                    "replay_remainder_sample_count": self.replay_buffer.last_remainder_sample_count,
+                    "replay_cutoff_raw_reward": self.replay_buffer.last_cutoff_raw_reward,
                 }
             )
         return info

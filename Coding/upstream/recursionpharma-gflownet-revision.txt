@@ -1,0 +1,5 @@
+Repository: https://github.com/recursionpharma/gflownet.git
+Commit: da999404e997a302a81773eb183b1da6ec2a4449
+
+Apply recursionpharma-gflownet-local-fixes.patch with git apply --unidiff-zero
+after checking out this commit.

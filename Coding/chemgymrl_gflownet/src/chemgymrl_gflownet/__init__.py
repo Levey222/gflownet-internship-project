@@ -17,7 +17,11 @@ from .procedure_gflownet import (
     ProcedureSequenceContext,
 )
 from .reproducibility import seed_process
-from .replay import OfflineFirstDataSource, PositiveRewardReplayBuffer
+from .replay import (
+    OfflineFirstDataSource,
+    PercentileMixedReplayBuffer,
+    PositiveRewardReplayBuffer,
+)
 
 __all__ = [
     "ACTION_DIMENSION",
@@ -31,6 +35,7 @@ __all__ = [
     "FictReactProcedureBridge",
     "FixedLengthSeqTransformerGFN",
     "OfflineFirstDataSource",
+    "PercentileMixedReplayBuffer",
     "PositiveRewardReplayBuffer",
     "ProcedureSequenceContext",
     "ProcedureEvaluation",

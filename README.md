@@ -28,6 +28,21 @@ gflownet-internship-project/
 `recursionpharma-gflownet` and `chemgymrl` directories are local clones of the
 upstream projects and are therefore excluded from this repository.
 
+## Reproducing the GFlowNet dependency
+
+The exact upstream revision and the small local compatibility patch are stored
+in `Coding/upstream/`. From `Coding/`, prepare the dependency with:
+
+```bash
+git clone https://github.com/recursionpharma/gflownet.git recursionpharma-gflownet
+cd recursionpharma-gflownet
+git checkout da999404e997a302a81773eb183b1da6ec2a4449
+git apply --unidiff-zero ../upstream/recursionpharma-gflownet-local-fixes.patch
+```
+
+The patch corrects Flow Matching initialisation and disables gradient tracking
+during model-based trajectory sampling. It does not alter either loss equation.
+
 ## Python setup
 
 Use a virtual environment, and do not install into the system Python.

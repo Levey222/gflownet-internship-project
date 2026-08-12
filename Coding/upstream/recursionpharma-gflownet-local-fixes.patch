@@ -1,0 +1,15 @@
+diff --git a/src/gflownet/algo/flow_matching.py b/src/gflownet/algo/flow_matching.py
+index 33c436b..5cfb81f 100644
+--- a/src/gflownet/algo/flow_matching.py
++++ b/src/gflownet/algo/flow_matching.py
+@@ -49 +49 @@
+-        self.correct_idempotent: bool = self.correct_idempotent or cfg.algo.fm.correct_idempotent
++        self.correct_idempotent: bool = cfg.algo.tb.do_correct_idempotent or cfg.algo.fm.correct_idempotent
+diff --git a/src/gflownet/algo/graph_sampling.py b/src/gflownet/algo/graph_sampling.py
+index 9cf9fae..9d77f8e 100644
+--- a/src/gflownet/algo/graph_sampling.py
++++ b/src/gflownet/algo/graph_sampling.py
+@@ -70,0 +71 @@
++    @torch.no_grad()
+@@ -207,0 +209 @@
++    @torch.no_grad()

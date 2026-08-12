@@ -34,10 +34,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--validation-batches", type=int, default=1)
     parser.add_argument("--final-batches", type=int, default=2)
     parser.add_argument("--print-every", type=int, default=1)
-    parser.add_argument("--positive-replay", action="store_true")
+    replay_group = parser.add_mutually_exclusive_group()
+    replay_group.add_argument("--positive-replay", action="store_true")
+    replay_group.add_argument("--mixed-replay", action="store_true")
     parser.add_argument("--replay-capacity", type=int, default=512)
     parser.add_argument("--replay-warmup", type=int, default=1)
     parser.add_argument("--replay-batch-size", type=int, default=16)
+    parser.add_argument("--mixed-replay-top-fraction", type=float, default=0.1)
+    parser.add_argument("--mixed-replay-top-sample-fraction", type=float, default=0.5)
     parser.add_argument("--log-dir", type=Path)
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
@@ -57,6 +61,10 @@ def parse_args() -> argparse.Namespace:
         parser.error("--replay-warmup must be between 1 and --replay-capacity")
     if args.replay_batch_size < 1:
         parser.error("--replay-batch-size must be at least 1")
+    if not 0 < args.mixed_replay_top_fraction < 1:
+        parser.error("--mixed-replay-top-fraction must be between 0 and 1")
+    if not 0 < args.mixed_replay_top_sample_fraction < 1:
+        parser.error("--mixed-replay-top-sample-fraction must be between 0 and 1")
     return args
 
 
@@ -87,7 +95,7 @@ def main() -> None:
     config.algo.valid_num_from_policy = args.batch_size
     config.cond.temperature.sample_dist = "constant"
     config.cond.temperature.dist_params = [1.0]
-    if args.positive_replay:
+    if args.positive_replay or args.mixed_replay:
         config.replay.use = True
         config.replay.capacity = args.replay_capacity
         config.replay.warmup = args.replay_warmup
@@ -99,6 +107,9 @@ def main() -> None:
         config,
         reward_scale=args.reward_scale,
         positive_replay=args.positive_replay,
+        mixed_replay=args.mixed_replay,
+        mixed_replay_top_fraction=args.mixed_replay_top_fraction,
+        mixed_replay_top_sample_fraction=args.mixed_replay_top_sample_fraction,
     )
     try:
         trainer.run()
