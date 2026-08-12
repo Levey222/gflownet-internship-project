@@ -532,9 +532,18 @@ A second replay buffer was then added for a closer, but still simplified, compar
 Two implementations are possible in the current finite procedure environment. The first is a simple proof of concept. A standard Trajectory-Balance model is trained, an upper-tail threshold $t$ is fixed, and the original positive terminal reward is changed to
 \begin{equation}
 \widetilde{R}_{\lambda}(x)
-=R(x)\exp\!\left(\lambda[r(x)-t]_+\right).
+=R(x)\exp\!\left(\lambda\frac{[r(x)-t]_+}{s}\right).
 \end{equation}
-Here $r(x)$ is the raw ChemGymRL result and $R(x)$ is the positive reward already required by the GFlowNet. The parameter $\lambda$ controls how strongly the upper tail is favoured. This version is easy to implement and keeps the Trajectory Balance equation unchanged, but it has no explicit constraint tying the new policy to the baseline. Reward excess should be normalised or clipped before exponentiation so that the change does not create a numerical scaling problem.
+Here $r(x)$ is the raw ChemGymRL result, $R(x)$ is the positive reward already required by the GFlowNet, and $s=0.05$ is the original reward scale. The parameter $\lambda$ controls how strongly the upper tail is favoured. The combined log reward uses the same final $[-20,20]$ clip as the baseline transform. This version keeps the Trajectory Balance equation unchanged, but it has no explicit constraint tying the new policy to the baseline.
+
+For the first test, the tail was fixed before training as $r(x)>0.10$. This contains 117 of the 19,683 procedures. A fixed raw threshold was used because exact ranks 100 and 101 are tied to numerical precision. Values of $\lambda$ from 0 to 1 were checked against the whole enumerated space before training. I selected $\lambda=0.25$ as a restrained setting, then ran matched 1,000-step models with seeds 0, 17 and 42, 32 new procedures per step and no replay.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\linewidth]{figures/chemgymrl_upper_tail_target_sweep.png}
+    \caption{Exact effect of the Wang-inspired terminal target before training. The selected $\lambda=0.25$ increases upper-tail probability, but it also predicts fewer unique procedures and more repeated samples.}
+    \label{fig:upper-tail-target-sweep}
+\end{figure}
 
 The second implementation is closer to Wang et al. A baseline GFlowNet is trained and frozen, giving a reference terminal distribution $P_0(x)$. After selecting $\beta$, $\alpha$ and a fixed threshold $t^*$, the new GFlowNet terminal reward is defined as
 \begin{equation}
@@ -596,7 +605,44 @@ The variance is the main result. Seeds 0 and 17 kept a zero top-decile cutoff an
 
 \subsection{Upper-tail results}
 
-The Wang-inspired upper-tail experiment has not been run yet. No result is claimed for this part of the project.
+The exact sweep showed what the changed target would do if it were learned. At $\lambda=0.25$, exact top-100 probability rises from $20.59\%$ to $30.50\%$, and expected distinct top-100 procedures in 1,024 samples rises from 73.7 to 76.7. Expected total uniqueness falls from 863.6 to 770.4, so even this restrained target has a concentration cost.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{l c c c c}
+\hline
+Metric & Baseline run & Tail-shaped run & Baseline target & Shaped target \\
+\hline
+Mean raw reward & $-0.0052\pm0.0018$ & $-0.0058\pm0.0022$ & $0.0425$ & $0.0647$ \\
+Defined-tail fraction & $0.098\%\pm0.000\%$ & $0.098\%\pm0.098\%$ & $21.44\%$ & $31.30\%$ \\
+Unique tail procedures & $1.0\pm0.0$ & $1.0\pm1.0$ & $80.5$ & $83.2$ \\
+Top-100 fraction & $0.098\%\pm0.000\%$ & $0.065\%\pm0.056\%$ & $20.59\%$ & $30.50\%$ \\
+Unique top-100 & $1.0\pm0.0$ & $0.67\pm0.58$ & $73.7$ & $76.7$ \\
+Duplicate fraction & $3.48\%\pm0.25\%$ & $3.91\%\pm0.64\%$ & $15.66\%$ & $24.77\%$ \\
+\hline
+\end{tabular}
+\caption{Matched no-replay results for seeds 0, 17 and 42 after 1,000 steps. Each model generated 1,024 final procedures. Each target column is the exact expectation under that method's own terminal reward, so the shaped run is not judged against the original distribution.}
+\label{tab:upper-tail-results}
+\end{table}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\linewidth]{figures/chemgymrl_upper_tail_final_comparison.png}
+    \caption{Final baseline and tail-shaped samples. Bars show the mean, error bars show the sample standard deviation, points show seeds, and the coloured dashed markers show the exact expectation for each target. Both trained policies remain far from their intended upper-tail distribution.}
+    \label{fig:upper-tail-final}
+\end{figure}
+
+The shaped runs completed without invalid trajectories or numerical failures. Final TB loss was $2.66\pm0.21$ and learned $\log Z$ was $7.93\pm0.10$, compared with exact shaped $\log Z=10.03$. A falling loss was therefore not enough to show that the rare part of the target had been learned.
+
+During the 32,000 training samples, the baseline encountered $53.7\pm1.2$ tail trajectories and $43.0\pm1.0$ distinct tail procedures. The shaped runs recorded $69.7\pm6.5$ and $52.3\pm3.5$. This is a descriptive three-seed difference rather than a causal estimate, and it did not remain in the final policy. Final unique-tail generation was $1.0$ per seed for both methods on average.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/chemgymrl_upper_tail_training_exposure.png}
+    \caption{Tail procedures observed during training. The shaped runs encountered slightly more of the fixed tail, but the final samples in Table~\ref{tab:upper-tail-results} show that this was not enough to learn the shaped target.}
+    \label{fig:upper-tail-training}
+\end{figure}
 
 \section{Discussion}
 
@@ -608,20 +654,27 @@ The baseline found too few positive procedures after 1,000 steps. Positive repla
 
 \subsection{Upper-tail quality and diversity}
 
-Replay increased the top-100 fraction from about 0.1 per cent to 26 per cent, but the exact target value was about 21 per cent. At the same time, the duplicate fraction rose to 22 per cent. The model found important procedures more often, but concentrated on them too heavily. The next replay test should retain some lower-reward examples, while the later Wang-inspired experiment should measure unique tail coverage rather than only CVaR or mean reward.
+Replay increased the top-100 fraction from about 0.1 per cent to 26 per cent, but the exact target value was about 21 per cent. At the same time, the duplicate fraction rose to 22 per cent. The model found important procedures more often, but concentrated on them too heavily.
+
+Changing the terminal target alone did not solve the other side of the problem. The exact shaped distribution places 31.30 per cent of its probability above the fixed threshold, but the trained policy produced only 0.098 per cent. This is not evidence that upper-tail shaping is a bad target. It shows that a larger reward for an unseen state does not make that state easier to discover. A useful follow-up is to train the same fixed target with controlled replay or another off-policy exposure method, then check whether final unique-tail coverage rises without the concentration seen with positive-only replay.
 
 \subsection{Relationship to existing research}
 
-The result supports Shen et al.'s general argument that high-reward replay can help a GFlowNet under a limited training budget. The protocol here is much simpler, so it should not be presented as a reproduction. The mixed-percentile runs show that percentile ties and rolling-buffer feedback matter in this task. Two seeds kept replaying zero-reward examples, while one seed crossed into a selective positive-replay regime. Wang et al. provide the next problem rather than an explanation of the current result: deliberately changing the target towards the upper tail while controlling how far the new model moves.
+The result supports Shen et al.'s general argument that high-reward replay can help a GFlowNet under a limited training budget. The protocol here is much simpler, so it should not be presented as a reproduction. The mixed-percentile runs show that percentile ties and rolling-buffer feedback matter in this task. Two seeds kept replaying zero-reward examples, while one seed crossed into a selective positive-replay regime.
+
+The upper-tail test takes its problem and measurements from Wang et al., but it is not their method. Their model is a continuous flow or diffusion model fine-tuned from a reference distribution. This project changed a discrete GFlowNet terminal target and trained from scratch. The negative result is still relevant to the same problem: changing the desired tail probability is not sufficient when finite on-policy training rarely reaches that tail.
 
 \section{Limitations}
 
 The ChemGymRL experiment uses a fictitious one-step environment with nine discretised controls. It does not represent arbitrary reactions, molecule generation or laboratory chemistry. Its small terminal space makes exact evaluation possible, but the same calculation will not scale to a large chemical design space. The reward scale of 0.05 is also a modelling choice which changes the target distribution.
 
-Only three seeds and one 1,000-step budget were used, so the results are descriptive rather than a statistical conclusion. The replay update contains more trajectories than the baseline even though the number of simulator calls is matched. Neither replay protocol is an exact reproduction of Shen et al. The mixed method uses a rolling buffer and a rank-based tie rule, and its three runs were highly variable. The Wang-inspired method is still a proposal. Finally, the sEH score comes from a supplied proxy model and is not evidence of physical binding, safety or synthesizability.
+Only three seeds and one 1,000-step budget were used, so the results are descriptive rather than a statistical conclusion. The replay update contains more trajectories than the baseline even though the number of simulator calls is matched. Neither replay protocol is an exact reproduction of Shen et al. The mixed method uses a rolling buffer and a rank-based tie rule, and its three runs were highly variable.
+
+The Wang-inspired test uses one threshold and one selected strength after an offline sweep. It is not an anchored fine-tuning reproduction, and the models were trained from scratch rather than initialised from the baseline. Right-CVaR within the fixed tail was not treated as a stable aggregate because one shaped seed generated no tail sample and the other two generated only one or two. Unique tail coverage and hit rate are more honest for this result. Finally, the sEH score comes from a supplied proxy model and is not evidence of physical binding, safety or synthesizability.
 
 \section{Conclusion and Future Work}
-% To be written.
+
+The current finite experiment separates two failures. Positive replay reaches useful procedures but can overshoot and repeat them. Tail shaping defines a better upper-tail objective but does not reliably discover the states needed to learn it. The next controlled test should combine the fixed $r(x)>0.10$, $\lambda=0.25$ target with a restrained exposure method and compare it against these no-replay shaped runs under the same simulator-call budget. Large ChemGymRL or supercomputer experiments should wait until that local method improves distinct tail coverage across seeds.
 
 \section{References}
 
