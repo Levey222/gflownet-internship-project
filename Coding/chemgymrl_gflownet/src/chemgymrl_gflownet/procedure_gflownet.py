@@ -153,6 +153,8 @@ class ChemGymRLProcedureTrainer(StandardOnlineTrainer):
         replay_raw_reward_threshold: float = 0.0,
         mixed_replay_top_fraction: float = 0.1,
         mixed_replay_top_sample_fraction: float = 0.5,
+        tail_threshold: float | None = None,
+        tail_strength: float = 0.0,
         print_config: bool = True,
     ) -> None:
         if positive_replay and mixed_replay:
@@ -164,6 +166,8 @@ class ChemGymRLProcedureTrainer(StandardOnlineTrainer):
         self.replay_raw_reward_threshold = replay_raw_reward_threshold
         self.mixed_replay_top_fraction = mixed_replay_top_fraction
         self.mixed_replay_top_sample_fraction = mixed_replay_top_sample_fraction
+        self.tail_threshold = tail_threshold
+        self.tail_strength = tail_strength
         super().__init__(config, print_config=print_config)
 
     def set_default_hps(self, cfg: Config) -> None:
@@ -203,6 +207,8 @@ class ChemGymRLProcedureTrainer(StandardOnlineTrainer):
             control_bins=self.control_bins,
             seed=self.cfg.seed,
             reward_scale=self.reward_scale,
+            tail_threshold=self.tail_threshold,
+            tail_strength=self.tail_strength,
         )
         self.task = ChemGymRLProcedureTask(self.cfg, bridge)
 

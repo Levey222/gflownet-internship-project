@@ -17,6 +17,7 @@ from .procedure_gflownet import (
     ProcedureSequenceContext,
 )
 from .reproducibility import seed_process
+from .tail_reward import terminal_log_rewards, terminal_positive_rewards
 from .replay import (
     OfflineFirstDataSource,
     PercentileMixedReplayBuffer,
@@ -40,4 +41,6 @@ __all__ = [
     "ProcedureSequenceContext",
     "ProcedureEvaluation",
     "seed_process",
+    "terminal_log_rewards",
+    "terminal_positive_rewards",
 ]

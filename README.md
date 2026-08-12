@@ -103,6 +103,34 @@ If you want to use the RL training scripts in that repo, you will also want:
 pip install stable-baselines3
 ```
 
+## Upper-tail experiment
+
+The Wang-inspired proof of concept changes the positive terminal target without
+changing the Trajectory Balance loss. The exact target sweep can be reproduced
+from the saved exhaustive table with:
+
+```bash
+Coding/.venv/bin/python Coding/chemgymrl_gflownet/scripts/analyze_upper_tail_targets.py \
+  --reference-csv Coding/chemgymrl_gflownet/results/exhaustive_reference_2026-07-28/procedures.csv \
+  --output-dir Coding/chemgymrl_gflownet/results/upper_tail_target_sweep_threshold010 \
+  --reward-scale 0.05 --tail-threshold 0.10 \
+  --strengths 0 0.1 0.25 0.5 0.75 1.0 --selected-strength 0.25
+```
+
+A matched no-replay training run uses:
+
+```bash
+Coding/.venv/bin/python Coding/chemgymrl_gflownet/scripts/train_procedure_gflownet.py \
+  --steps 1000 --batch-size 32 --seed 0 --device cpu \
+  --reward-scale 0.05 --tail-threshold 0.10 --tail-strength 0.25 \
+  --validate-every 100 --validation-batches 1 --final-batches 32 \
+  --log-dir Coding/chemgymrl_gflownet/logs/upper_tail_seed0
+```
+
+This is an adaptation of the upper-tail problem to a discrete GFlowNet terminal
+reward. It is not a reproduction of Wang et al.'s continuous-model fine-tuning
+algorithm.
+
 ## Current recommendation
 
 - keep notes here

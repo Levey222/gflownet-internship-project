@@ -9,6 +9,8 @@ import chemistrylab  # noqa: F401  # Registers ChemGymRL environments with Gymna
 import gymnasium as gym
 import numpy as np
 
+from .tail_reward import terminal_positive_rewards
+
 
 ENVIRONMENT_ID = "FictReactBandit-v1"
 ACTION_DIMENSION = 9
@@ -58,6 +60,8 @@ class FictReactProcedureBridge:
         control_bins: Sequence[Sequence[float]] | None = None,
         seed: int = 0,
         reward_scale: float = DEFAULT_REWARD_SCALE,
+        tail_threshold: float | None = None,
+        tail_strength: float = 0.0,
     ) -> None:
         if bins is not None and control_bins is not None:
             raise ValueError("provide either bins or control_bins, not both")
@@ -80,6 +84,14 @@ class FictReactProcedureBridge:
         self.num_token_values = int(bin_array.shape[1])
         self.seed = seed
         self.reward_scale = float(reward_scale)
+        self.tail_threshold = tail_threshold
+        self.tail_strength = float(tail_strength)
+        terminal_positive_rewards(
+            0.0,
+            self.reward_scale,
+            tail_threshold=self.tail_threshold,
+            tail_strength=self.tail_strength,
+        )
         self.environment = gym.make(ENVIRONMENT_ID)
         if self.environment.action_space.shape != (ACTION_DIMENSION,):
             raise ValueError(
@@ -133,10 +145,14 @@ class FictReactProcedureBridge:
         return reward
 
     def to_positive_reward(self, raw_reward: float) -> float:
-        if not np.isfinite(raw_reward):
-            raise ValueError("raw reward must be finite")
-        scaled_log_reward = np.clip(raw_reward / self.reward_scale, -20.0, 20.0)
-        return float(np.exp(scaled_log_reward))
+        return float(
+            terminal_positive_rewards(
+                raw_reward,
+                self.reward_scale,
+                tail_threshold=self.tail_threshold,
+                tail_strength=self.tail_strength,
+            )
+        )
 
     def evaluate(self, tokens: Iterable[int]) -> ProcedureEvaluation:
         token_tuple = self.validate_tokens(tokens)

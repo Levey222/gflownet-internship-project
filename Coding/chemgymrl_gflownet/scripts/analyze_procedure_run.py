@@ -8,6 +8,7 @@ import csv
 import json
 import os
 import sqlite3
+import sys
 from collections import Counter
 from pathlib import Path
 
@@ -19,6 +20,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PACKAGE_ROOT / "src"))
+
+from chemgymrl_gflownet.tail_reward import terminal_log_rewards  # noqa: E402
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -26,9 +32,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--generated-db", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--reward-scale", type=float, default=0.05)
+    parser.add_argument("--tail-threshold", type=float)
+    parser.add_argument("--tail-strength", type=float, default=0.0)
     args = parser.parse_args()
-    if args.reward_scale <= 0:
+    if not np.isfinite(args.reward_scale) or args.reward_scale <= 0:
         parser.error("--reward-scale must be positive")
+    if not np.isfinite(args.tail_strength) or args.tail_strength < 0:
+        parser.error("--tail-strength must be finite and non-negative")
+    if args.tail_threshold is not None and not np.isfinite(args.tail_threshold):
+        parser.error("--tail-threshold must be finite")
+    if args.tail_strength > 0 and args.tail_threshold is None:
+        parser.error("--tail-threshold is required when --tail-strength is positive")
     return args
 
 
@@ -186,14 +200,29 @@ def main() -> None:
 
     generated_rewards = np.asarray([row["raw_reward"] for row in generated], dtype=float)
     generated_positive = np.asarray([row["positive_reward"] for row in generated], dtype=float)
-    expected_positive = np.exp(np.clip(generated_rewards / args.reward_scale, -20.0, 20.0))
+    expected_log_rewards = np.asarray(
+        terminal_log_rewards(
+            generated_rewards,
+            args.reward_scale,
+            tail_threshold=args.tail_threshold,
+            tail_strength=args.tail_strength,
+        )
+    )
+    expected_positive = np.exp(expected_log_rewards)
     exact_rewards = np.asarray(
         [reward_by_procedure[row["tokens"]] for row in generated],
         dtype=float,
     )
     ranks = np.asarray([rank_by_procedure[row["tokens"]] for row in generated], dtype=int)
 
-    log_weights = np.clip(reference_rewards / args.reward_scale, -20.0, 20.0)
+    log_weights = np.asarray(
+        terminal_log_rewards(
+            reference_rewards,
+            args.reward_scale,
+            tail_threshold=args.tail_threshold,
+            tail_strength=args.tail_strength,
+        )
+    )
     weights = np.exp(log_weights - log_weights.max())
     target_probabilities = weights / weights.sum()
     exact_log_partition = float(log_weights.max() + np.log(weights.sum()))
@@ -238,6 +267,44 @@ def main() -> None:
     procedure_counts = Counter(row["tokens"] for row in generated)
     most_repeated_count = max(procedure_counts.values())
 
+    defined_tail = None
+    if args.tail_threshold is not None:
+        reference_tail_mask = reference_rewards > args.tail_threshold
+        generated_tail_mask = generated_rewards > args.tail_threshold
+        generated_tail_procedures = {
+            row["tokens"]
+            for row, in_tail in zip(generated, generated_tail_mask)
+            if in_tail
+        }
+        generated_tail_rewards = generated_rewards[generated_tail_mask]
+        defined_tail = {
+            "threshold": args.tail_threshold,
+            "reference_procedure_count": int(reference_tail_mask.sum()),
+            "reference_procedure_fraction": float(reference_tail_mask.mean()),
+            "target_probability": float(target_probabilities[reference_tail_mask].sum()),
+            "generated_count": int(generated_tail_mask.sum()),
+            "generated_fraction": float(generated_tail_mask.mean()),
+            "generated_unique_count": len(generated_tail_procedures),
+            "generated_unique_coverage": float(
+                len(generated_tail_procedures) / reference_tail_mask.sum()
+            ),
+            "generated_conditional_mean_raw_reward": (
+                float(generated_tail_rewards.mean())
+                if len(generated_tail_rewards)
+                else None
+            ),
+            "target_conditional_mean_raw_reward": float(
+                np.sum(
+                    target_probabilities[reference_tail_mask]
+                    * reference_rewards[reference_tail_mask]
+                )
+                / target_probabilities[reference_tail_mask].sum()
+            ),
+            "target_expected_unique_count": float(
+                target_inclusion_probabilities[reference_tail_mask].sum()
+            ),
+        }
+
     output_rows = []
     for row, exact_reward, rank in zip(generated, exact_rewards, ranks):
         output_rows.append(
@@ -254,6 +321,11 @@ def main() -> None:
         "reference_csv": str(reference_path),
         "generated_db": str(generated_path),
         "reward_scale": args.reward_scale,
+        "terminal_target": {
+            "mode": "upper_tail" if args.tail_strength > 0 else "baseline",
+            "tail_threshold": args.tail_threshold,
+            "tail_strength": args.tail_strength,
+        },
         "sample_count": len(generated),
         "unique_procedure_count": len(unique_procedures),
         "duplicate_count": len(generated) - len(unique_procedures),
@@ -308,6 +380,7 @@ def main() -> None:
                 np.sum(target_probabilities * target_inclusion_probabilities)
             ),
         },
+        "defined_tail": defined_tail,
         "best_generated_procedure": {
             "tokens": " ".join(str(token) for token in generated[best_index]["tokens"]),
             "raw_reward": float(generated_rewards[best_index]),

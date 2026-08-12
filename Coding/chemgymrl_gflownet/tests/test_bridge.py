@@ -58,6 +58,26 @@ def test_positive_reward_is_finite_positive_and_order_preserving():
     assert transformed[0] < transformed[1] < transformed[2]
 
 
+def test_upper_tail_reward_changes_only_values_above_the_threshold():
+    with FictReactProcedureBridge(
+        reward_scale=0.05,
+        tail_threshold=0.1,
+        tail_strength=0.25,
+    ) as bridge:
+        below = bridge.to_positive_reward(0.05)
+        at_threshold = bridge.to_positive_reward(0.1)
+        above = bridge.to_positive_reward(0.15)
+
+    assert below == pytest.approx(np.exp(1.0))
+    assert at_threshold == pytest.approx(np.exp(2.0))
+    assert above == pytest.approx(np.exp(3.25))
+
+
+def test_upper_tail_reward_requires_a_threshold():
+    with pytest.raises(ValueError, match="tail_threshold"):
+        FictReactProcedureBridge(tail_strength=0.25)
+
+
 def test_legacy_shared_bins_are_still_supported():
     with FictReactProcedureBridge(bins=(0.0, 0.25, 1.0)) as bridge:
         action = bridge.decode((1,) * ACTION_DIMENSION)

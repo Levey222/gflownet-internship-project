@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import math
 import os
 import sys
 from datetime import datetime
@@ -30,6 +32,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--reward-scale", type=float, default=DEFAULT_REWARD_SCALE)
+    parser.add_argument("--tail-threshold", type=float)
+    parser.add_argument("--tail-strength", type=float, default=0.0)
     parser.add_argument("--validate-every", type=int, default=25)
     parser.add_argument("--validation-batches", type=int, default=1)
     parser.add_argument("--final-batches", type=int, default=2)
@@ -49,8 +53,16 @@ def parse_args() -> argparse.Namespace:
         parser.error("--steps must be at least 1")
     if args.batch_size < 1:
         parser.error("--batch-size must be at least 1")
-    if args.reward_scale <= 0:
+    if not math.isfinite(args.reward_scale) or args.reward_scale <= 0:
         parser.error("--reward-scale must be positive")
+    if not math.isfinite(args.tail_strength) or args.tail_strength < 0:
+        parser.error("--tail-strength must be finite and non-negative")
+    if args.tail_threshold is not None and not math.isfinite(args.tail_threshold):
+        parser.error("--tail-threshold must be finite")
+    if args.tail_strength > 0 and args.tail_threshold is None:
+        parser.error("--tail-threshold is required when --tail-strength is positive")
+    if args.tail_threshold is not None and args.tail_strength == 0:
+        parser.error("--tail-strength must be positive when --tail-threshold is supplied")
     if args.validation_batches < 1:
         parser.error("--validation-batches must be at least 1")
     if args.final_batches < 0:
@@ -106,11 +118,40 @@ def main() -> None:
     trainer = ChemGymRLProcedureTrainer(
         config,
         reward_scale=args.reward_scale,
+        tail_threshold=args.tail_threshold,
+        tail_strength=args.tail_strength,
         positive_replay=args.positive_replay,
         mixed_replay=args.mixed_replay,
         mixed_replay_top_fraction=args.mixed_replay_top_fraction,
         mixed_replay_top_sample_fraction=args.mixed_replay_top_sample_fraction,
     )
+    settings = {
+        "steps": args.steps,
+        "batch_size": args.batch_size,
+        "seed": args.seed,
+        "device": args.device,
+        "reward_scale": args.reward_scale,
+        "tail_threshold": args.tail_threshold,
+        "tail_strength": args.tail_strength,
+        "reward_formula": (
+            "log_R = clip(raw_reward / reward_scale + tail_strength * "
+            "max(raw_reward - tail_threshold, 0) / reward_scale, -20, 20)"
+            if args.tail_strength > 0
+            else "log_R = clip(raw_reward / reward_scale, -20, 20)"
+        ),
+        "positive_replay": args.positive_replay,
+        "mixed_replay": args.mixed_replay,
+        "replay_batch_size": (
+            args.replay_batch_size
+            if args.positive_replay or args.mixed_replay
+            else 0
+        ),
+        "validation_batches": args.validation_batches,
+        "final_batches": args.final_batches,
+    }
+    with (log_dir / "procedure_experiment.json").open("w", encoding="utf8") as output_file:
+        json.dump(settings, output_file, indent=2)
+        output_file.write("\n")
     try:
         trainer.run()
     finally:
