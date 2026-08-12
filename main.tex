@@ -359,6 +359,33 @@ Figure~\ref{fig:tb-beta4-histogram} is another way of looking at the same run. M
     \item The short run verifies that the controlled replay method works, but it does not show a clear sample-efficiency improvement. The agreed next check is the matched 1000-step comparison across seeds 0, 17 and 42.
 \end{itemize}
 
+\subsection{Mixed replay across three seeds}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/chemgymrl_three_method_replay_summary.png}
+\caption{No replay, positive-only replay and mixed replay after 1000 steps for seeds 0, 17 and 42. Bars show the mean, error bars show the sample standard deviation, black points show the individual seeds and dashed lines show the reference.}
+\label{fig:chemgymrl-three-method-summary}
+\end{figure}
+
+\begin{itemize}
+    \item Mixed replay gave $12.11\% \pm 14.12\%$ positive procedures and category total-variation error $0.157 \pm 0.124$. The large error bars are important here because the seeds did not behave in the same way.
+    \item Seeds 0 and 17 remained close to the zero-reward plateau. Seed 42 reached $28.32\%$ positive procedures, close to the exact target of $26.81\%$, and covered $21.02\%$ of target mass.
+    \item Across the three seeds, mixed replay retained $941 \pm 81$ unique procedures and produced $8.11\% \pm 7.88\%$ duplicates. It was less concentrated than positive-only replay, but its target learning was much less consistent.
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/chemgymrl_mixed_replay_diagnostics.png}
+\caption{Logged mixed-replay diagnostics for the three 1000-step runs. Seeds 0 and 17 kept a zero top-decile cutoff. Seed 42 crossed to a positive cutoff around step 500, after which its replay batch and policy became more positive. Logging intervals differ between seed 0 and the other two runs, so the lines show recorded checkpoints rather than every update.}
+\label{fig:chemgymrl-mixed-replay-diagnostics}
+\end{figure}
+
+\begin{itemize}
+    \item The rolling top-decile rule creates a feedback effect. A seed which discovers enough positive procedures raises its cutoff and then replays more selective procedures. A seed which does not cross that point keeps replaying many zero-reward examples.
+    \item This makes the current percentile rule sensitive to initial exploration and to the large reward tie. It is not reliable enough to replace the positive-only result or to move straight to a larger chemistry task.
+\end{itemize}
+
 \clearpage
 \part{Scientific Review and Project Report}
 
@@ -498,7 +525,7 @@ The ChemGymRL baseline used seeds 0, 17 and 42. Each model trained for 1,000 ste
 
 The matched replay runs used the same seeds, training length and 32 new ChemGymRL calls per step. Procedures with raw reward above zero were stored in a buffer, and eight stored procedures were sampled uniformly and added to each update. This means replay used 40 trajectories for the neural-network update but still made only 32 new simulator calls. It is a simple positive-only test, not a reproduction of Shen et al.'s percentile-mixed replay method.
 
-A second replay buffer was then added for a closer, but still simplified, comparison. It retains all valid recent procedures, ranks the current buffer by raw reward, and adds four examples from the highest-reward 10 per cent and four from the remaining 90 per cent. A 200-step seed-17 run was used to check this sampling path before the matched 1000-step runs.
+A second replay buffer was then added for a closer, but still simplified, comparison. It retains all valid recent procedures, ranks the current buffer by raw reward, and adds four examples from the highest-reward 10 per cent and four from the remaining 90 per cent. A 200-step seed-17 run was used to check this sampling path before matched 1000-step runs with seeds 0, 17 and 42.
 
 \subsection{Wang-inspired upper-tail experiment}
 
@@ -542,20 +569,20 @@ Without replay, the model remained close to the large zero-reward part of the sp
 
 \begin{table}[htbp]
 \centering
-\begin{tabular}{l c c c}
+\begin{tabular}{l c c c c}
 \hline
-Metric & No replay & Replay 8 & Reference \\
+Metric & No replay & Positive 8 & Mixed 8 & Reference \\
 \hline
-Mean raw reward & $-0.0052\pm0.0018$ & $0.0492\pm0.0076$ & $0.0425$ \\
-Positive fraction & $1.07\%\pm0.26\%$ & $36.43\%\pm4.54\%$ & $26.81\%$ \\
-Category TV error & $0.261\pm0.009$ & $0.103\pm0.048$ & $0$ \\
-Top-100 fraction & $0.10\%\pm0.00\%$ & $25.98\%\pm3.73\%$ & $20.59\%$ \\
-Target mass covered & $5.06\%\pm0.12\%$ & $21.52\%\pm0.20\%$ & $22.47\%$ \\
-Unique procedures & $988\pm3$ & $798\pm43$ & $864$ \\
-Duplicate fraction & $3.48\%\pm0.25\%$ & $22.04\%\pm4.22\%$ & $15.66\%$ \\
+Mean raw reward & $-0.0052\pm0.0018$ & $0.0492\pm0.0076$ & $0.0061\pm0.0295$ & $0.0425$ \\
+Positive fraction & $1.07\%\pm0.26\%$ & $36.43\%\pm4.54\%$ & $12.11\%\pm14.12\%$ & $26.81\%$ \\
+Category TV error & $0.261\pm0.009$ & $0.103\pm0.048$ & $0.157\pm0.124$ & $0$ \\
+Top-100 fraction & $0.10\%\pm0.00\%$ & $25.98\%\pm3.73\%$ & $7.36\%\pm11.90\%$ & $20.59\%$ \\
+Target mass covered & $5.06\%\pm0.12\%$ & $21.52\%\pm0.20\%$ & $10.65\%\pm8.99\%$ & $22.47\%$ \\
+Unique procedures & $988\pm3$ & $798\pm43$ & $941\pm81$ & $864$ \\
+Duplicate fraction & $3.48\%\pm0.25\%$ & $22.04\%\pm4.22\%$ & $8.11\%\pm7.88\%$ & $15.66\%$ \\
 \hline
 \end{tabular}
-\caption{Final ChemGymRL procedure results across matched seeds 0, 17 and 42. Each trained model generated 1,024 procedures.}
+\caption{Final ChemGymRL procedure results across matched seeds 0, 17 and 42. Each trained model generated 1,024 procedures. Values are the mean and sample standard deviation across seeds.}
 \label{tab:chemgymrl-replay-results}
 \end{table}
 
@@ -563,7 +590,9 @@ Positive replay moved the generated distribution much closer to the exact target
 
 \subsection{Mixed replay diagnostic}
 
-The 200-step mixed-replay check completed with zero invalid trajectories and the intended four-plus-four replay split at every step. Its category total-variation error was 0.233, compared with 0.249 without replay and 0.321 for positive-only replay at the same short budget. It retained 998 unique procedures, but only $3.52\%$ of its final samples were positive and its exact target-mass coverage was $4.73\%$. The replay cutoff remained at raw reward zero because the top decile crossed the large zero-reward tie. These are preliminary single-seed values. The 1000-step three-seed runs are required before comparing the method with the existing replay result.
+The 200-step mixed-replay check completed with zero invalid trajectories and the intended four-plus-four replay split at every step. The later 1000-step runs also completed without invalid trajectories or numerical failures. Across seeds, mixed replay produced $12.11\%\pm14.12\%$ positive procedures, category total-variation error $0.157\pm0.124$, target-mass coverage $10.65\%\pm8.99\%$ and $941\pm81$ unique procedures.
+
+The variance is the main result. Seeds 0 and 17 kept a zero top-decile cutoff and remained near the zero-reward plateau. Seed 42 crossed to a positive cutoff around step 500 and eventually produced $28.32\%$ positive procedures, category total-variation error 0.015 and target-mass coverage $21.02\%$. This one strong run should not be used to claim that mixed replay is better on average. It shows that the rolling percentile rule can work after enough positive examples are found, but does not reliably create that condition.
 
 \subsection{Upper-tail results}
 
@@ -575,7 +604,7 @@ The current experiment shows that simulator-derived terminal rewards can train a
 
 \subsection{Target matching and sample efficiency}
 
-The baseline found too few positive procedures after 1,000 steps. Positive replay gave the model more updates from this rare region and reduced category TV error by about 0.158. The target-mass result was also close to direct target sampling. This suggests a real finite-training benefit, although replay performed more neural-network work per update and should not be described as free computation.
+The baseline found too few positive procedures after 1,000 steps. Positive replay gave the model more updates from this rare region and reduced category TV error by about 0.158. The target-mass result was also close to direct target sampling. This suggests a real finite-training benefit, although replay performed more neural-network work per update and should not be described as free computation. Mixed replay reduced concentration but was strongly seed dependent, so its lower mean concentration is not enough to call it the better method.
 
 \subsection{Upper-tail quality and diversity}
 
@@ -583,13 +612,13 @@ Replay increased the top-100 fraction from about 0.1 per cent to 26 per cent, bu
 
 \subsection{Relationship to existing research}
 
-The result supports Shen et al.'s general argument that high-reward replay can help a GFlowNet under a limited training budget. The protocol here is much simpler, so it should not be presented as a reproduction. The first mixed-percentile diagnostic has now been implemented, but its zero-valued top-decile cutoff shows that percentile ties matter in this task. Wang et al. provide the next problem rather than an explanation of the current result: deliberately changing the target towards the upper tail while controlling how far the new model moves.
+The result supports Shen et al.'s general argument that high-reward replay can help a GFlowNet under a limited training budget. The protocol here is much simpler, so it should not be presented as a reproduction. The mixed-percentile runs show that percentile ties and rolling-buffer feedback matter in this task. Two seeds kept replaying zero-reward examples, while one seed crossed into a selective positive-replay regime. Wang et al. provide the next problem rather than an explanation of the current result: deliberately changing the target towards the upper tail while controlling how far the new model moves.
 
 \section{Limitations}
 
 The ChemGymRL experiment uses a fictitious one-step environment with nine discretised controls. It does not represent arbitrary reactions, molecule generation or laboratory chemistry. Its small terminal space makes exact evaluation possible, but the same calculation will not scale to a large chemical design space. The reward scale of 0.05 is also a modelling choice which changes the target distribution.
 
-Only three seeds and one 1,000-step budget were used, so the results are descriptive rather than a statistical conclusion. The replay update contains more trajectories than the baseline even though the number of simulator calls is matched. Positive-only replay is not Shen et al.'s published method, and the current mixed replay result is only one 200-step diagnostic. The Wang-inspired method is still a proposal. Finally, the sEH score comes from a supplied proxy model and is not evidence of physical binding, safety or synthesizability.
+Only three seeds and one 1,000-step budget were used, so the results are descriptive rather than a statistical conclusion. The replay update contains more trajectories than the baseline even though the number of simulator calls is matched. Neither replay protocol is an exact reproduction of Shen et al. The mixed method uses a rolling buffer and a rank-based tie rule, and its three runs were highly variable. The Wang-inspired method is still a proposal. Finally, the sEH score comes from a supplied proxy model and is not evidence of physical binding, safety or synthesizability.
 
 \section{Conclusion and Future Work}
 % To be written.
