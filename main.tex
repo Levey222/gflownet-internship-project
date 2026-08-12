@@ -102,7 +102,7 @@ s dsdsd
 
 \textit{Short notes for now. Add the proper reference and compare the experimental settings before turning this into a report paragraph.}
 
-\textbf{Shen et al. (2023), Towards Understanding and Improving GFlowNet Training.} This is the closest paper to the replay test used here. The paper points out that a GFlowNet can have the correct target in theory but still learn it slowly with finite training. Their reward-prioritised replay method stores all terminal objects seen so far. Half of an extra replay batch is sampled from the top 10 per cent by reward and half from the remaining 90 per cent, then backward trajectories are sampled for those stored terminal objects before the loss is applied. This improved sample efficiency on several tasks, although it did not improve every final converged result. My current test is simpler: it stores only procedures with raw reward above zero, samples them uniformly, and adds eight of them to the 32 new trajectories in one update. It is inspired by the paper rather than a reproduction of its method.
+\textbf{Shen et al. (2023), Towards Understanding and Improving GFlowNet Training.} This is the closest paper to the replay test used here. The paper points out that a GFlowNet can have the correct target in theory but still learn it slowly with finite training. Their reward-prioritised replay method stores all terminal objects seen so far. Half of an extra replay batch is sampled from the top 10 per cent by reward and half from the remaining 90 per cent, then backward trajectories are sampled for those stored terminal objects before the loss is applied. This improved sample efficiency on several tasks, although it did not improve every final converged result. My first test was simpler: it stored only procedures with raw reward above zero. A later diagnostic kept all valid procedures and drew four replay examples from the top 10 per cent and four from the remaining 90 per cent. Both versions add replay to the 32 new trajectories in one update, so neither should be called a reproduction of the paper.
 
 \textbf{Wang et al. (2026), Efficient Tail-Aware Generative Optimization via Flow Model Fine-Tuning.} This paper asks how a generative model can improve rare high-reward results in the upper tail instead of only improving its average reward. It uses Value-at-Risk to set a tail threshold and Conditional Value-at-Risk to measure the average result beyond that threshold. Its fine-tuning method gives extra emphasis to results above the threshold while regularisation limits how far the new model moves from the original model. The molecular experiment shows how average reward, upper-tail quality and validity can be assessed separately. The method was made for continuous flow and diffusion models, not GFlowNets, so its loss cannot just be copied into this project. I am using its problem statement and measurements to plan a GFlowNet experiment with ChemGymRL terminal rewards. For the current finite task, a fixed top-$k$ tail may be clearer than a quantile because many procedures have exactly zero raw reward.
 
@@ -341,6 +341,24 @@ Figure~\ref{fig:tb-beta4-histogram} is another way of looking at the same run. M
     \item Possible next comparison: mix replay across reward percentiles or reward bands instead of keeping only positive results, then test whether target matching improves without losing the tail.
 \end{itemize}
 
+\subsection{Mixed-replay smoke test}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{figures/chemgymrl_200_step_mixed_replay_comparison.png}
+\caption{A 200-step seed-17 diagnostic comparing no replay, positive-only replay and mixed replay. Every training step used 32 new ChemGymRL evaluations. The replay methods added eight stored trajectories to the update. This is a wiring and short-run comparison, not the final multi-seed result.}
+\label{fig:chemgymrl-mixed-replay-smoke}
+\end{figure}
+
+\begin{itemize}
+    \item Mixed replay retained every valid procedure in a rolling buffer of 512. Four replay examples came from the highest-reward 10 per cent of the buffer and four came from the remaining 90 per cent.
+    \item The run completed all 200 steps with zero invalid trajectories. Every logged replay batch contained the intended four-plus-four split.
+    \item Mixed replay gave $3.52\%$ positive final samples, compared with $1.95\%$ without replay and $22.66\%$ with positive-only replay. The exact target value is $26.81\%$.
+    \item Category total-variation error was $0.233$ for mixed replay, $0.249$ without replay and $0.321$ for positive-only replay. Mixed replay also retained 998 unique procedures out of 1024 final samples.
+    \item The top-decile cutoff was a raw reward of zero throughout the run. This happens because only about $4.36\%$ of the complete procedure space has a positive raw reward. The top 10 per cent therefore contains all positive cases it has seen plus many procedures tied at zero.
+    \item The short run verifies that the controlled replay method works, but it does not show a clear sample-efficiency improvement. The agreed next check is the matched 1000-step comparison across seeds 0, 17 and 42.
+\end{itemize}
+
 \clearpage
 \part{Scientific Review and Project Report}
 
@@ -480,6 +498,8 @@ The ChemGymRL baseline used seeds 0, 17 and 42. Each model trained for 1,000 ste
 
 The matched replay runs used the same seeds, training length and 32 new ChemGymRL calls per step. Procedures with raw reward above zero were stored in a buffer, and eight stored procedures were sampled uniformly and added to each update. This means replay used 40 trajectories for the neural-network update but still made only 32 new simulator calls. It is a simple positive-only test, not a reproduction of Shen et al.'s percentile-mixed replay method.
 
+A second replay buffer was then added for a closer, but still simplified, comparison. It retains all valid recent procedures, ranks the current buffer by raw reward, and adds four examples from the highest-reward 10 per cent and four from the remaining 90 per cent. A 200-step seed-17 run was used to check this sampling path before the matched 1000-step runs.
+
 \subsection{Wang-inspired upper-tail experiment}
 
 Two implementations are possible in the current finite procedure environment. The first is a simple proof of concept. A standard Trajectory-Balance model is trained, an upper-tail threshold $t$ is fixed, and the original positive terminal reward is changed to
@@ -508,7 +528,7 @@ The original-target experiments should continue to report distribution error, in
 
 \section{Results}
 
-Results are reported as the mean and sample standard deviation across three seeds. The reference column is either an exact target value or the expected value from 1,024 direct samples from that target.
+Results are reported as the mean and sample standard deviation across three seeds unless a result is explicitly labelled as a single-seed diagnostic. The reference column is either an exact target value or the expected value from 1,024 direct samples from that target.
 
 \subsection{sEH benchmark results}
 
@@ -541,6 +561,10 @@ Duplicate fraction & $3.48\%\pm0.25\%$ & $22.04\%\pm4.22\%$ & $15.66\%$ \\
 
 Positive replay moved the generated distribution much closer to the exact target by category and target-mass coverage. It also went too far: positive and top-100 procedures were sampled more often than the target required, while uniqueness fell and duplicates exceeded the direct-target expectation.
 
+\subsection{Mixed replay diagnostic}
+
+The 200-step mixed-replay check completed with zero invalid trajectories and the intended four-plus-four replay split at every step. Its category total-variation error was 0.233, compared with 0.249 without replay and 0.321 for positive-only replay at the same short budget. It retained 998 unique procedures, but only $3.52\%$ of its final samples were positive and its exact target-mass coverage was $4.73\%$. The replay cutoff remained at raw reward zero because the top decile crossed the large zero-reward tie. These are preliminary single-seed values. The 1000-step three-seed runs are required before comparing the method with the existing replay result.
+
 \subsection{Upper-tail results}
 
 The Wang-inspired upper-tail experiment has not been run yet. No result is claimed for this part of the project.
@@ -559,13 +583,13 @@ Replay increased the top-100 fraction from about 0.1 per cent to 26 per cent, bu
 
 \subsection{Relationship to existing research}
 
-The result supports Shen et al.'s general argument that high-reward replay can help a GFlowNet under a limited training budget. The protocol here is much simpler, so it should not be presented as a reproduction. It instead gives a baseline for implementing Shen's mixed-percentile replay. Wang et al. provide the next problem rather than an explanation of the current result: deliberately changing the target towards the upper tail while controlling how far the new model moves.
+The result supports Shen et al.'s general argument that high-reward replay can help a GFlowNet under a limited training budget. The protocol here is much simpler, so it should not be presented as a reproduction. The first mixed-percentile diagnostic has now been implemented, but its zero-valued top-decile cutoff shows that percentile ties matter in this task. Wang et al. provide the next problem rather than an explanation of the current result: deliberately changing the target towards the upper tail while controlling how far the new model moves.
 
 \section{Limitations}
 
 The ChemGymRL experiment uses a fictitious one-step environment with nine discretised controls. It does not represent arbitrary reactions, molecule generation or laboratory chemistry. Its small terminal space makes exact evaluation possible, but the same calculation will not scale to a large chemical design space. The reward scale of 0.05 is also a modelling choice which changes the target distribution.
 
-Only three seeds and one 1,000-step budget were used, so the results are descriptive rather than a statistical conclusion. The replay update contains more trajectories than the baseline even though the number of simulator calls is matched. Positive-only replay is not Shen et al.'s published method, and the Wang-inspired method is still a proposal. Finally, the sEH score comes from a supplied proxy model and is not evidence of physical binding, safety or synthesizability.
+Only three seeds and one 1,000-step budget were used, so the results are descriptive rather than a statistical conclusion. The replay update contains more trajectories than the baseline even though the number of simulator calls is matched. Positive-only replay is not Shen et al.'s published method, and the current mixed replay result is only one 200-step diagnostic. The Wang-inspired method is still a proposal. Finally, the sEH score comes from a supplied proxy model and is not evidence of physical binding, safety or synthesizability.
 
 \section{Conclusion and Future Work}
 % To be written.
