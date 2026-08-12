@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""Summarise matched no-replay and replay procedure runs across random seeds."""
+"""Summarise matched procedure GFlowNet methods across random seeds."""
 
 from __future__ import annotations
 
 import argparse
 import csv
 import json
+import os
 from pathlib import Path
 from statistics import mean, stdev
+
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/gflownet-matplotlib")
 
 import matplotlib.pyplot as plt
 
@@ -43,12 +46,18 @@ METRICS = {
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
+    input_group = parser.add_mutually_exclusive_group(required=True)
+    input_group.add_argument(
         "--pair",
         action="append",
         nargs=3,
         metavar=("SEED", "NO_REPLAY_JSON", "REPLAY_JSON"),
-        required=True,
+    )
+    input_group.add_argument(
+        "--triplet",
+        action="append",
+        nargs=4,
+        metavar=("SEED", "NO_REPLAY_JSON", "POSITIVE_REPLAY_JSON", "MIXED_REPLAY_JSON"),
     )
     parser.add_argument("--output-dir", type=Path, required=True)
     return parser.parse_args()
@@ -113,7 +122,7 @@ def write_csv(summary: dict, path: Path) -> None:
         )
         writer.writeheader()
         for metric, methods in summary["by_metric"].items():
-            for method in ("no_replay", "positive_replay_8"):
+            for method in summary["methods"]:
                 row = methods[method]
                 writer.writerow(
                     {
@@ -137,17 +146,39 @@ def write_plot(summary: dict, path: Path) -> None:
         "unique_procedure_count",
     ]
     fig, axes = plt.subplots(2, 3, figsize=(13, 7.5))
-    colours = ["#2878b5", "#d95f02"]
+    colours = ["#2878b5", "#d95f02", "#2b8c4b"]
+    labels = {
+        "no_replay": "No replay",
+        "positive_replay_8": "Positive replay 8",
+        "mixed_replay_8": "Mixed replay 8",
+    }
+    methods = summary["methods"]
     for axis, metric in zip(axes.flat, plot_metrics):
         data = summary["by_metric"][metric]
-        means = [data[method]["mean"] for method in ("no_replay", "positive_replay_8")]
+        means = [data[method]["mean"] for method in methods]
         errors = [
             data[method]["sample_standard_deviation"]
-            for method in ("no_replay", "positive_replay_8")
+            for method in methods
         ]
-        axis.bar([0, 1], means, yerr=errors, capsize=5, color=colours, alpha=0.9)
+        positions = list(range(len(methods)))
+        axis.bar(
+            positions,
+            means,
+            yerr=errors,
+            capsize=5,
+            color=colours[: len(methods)],
+            alpha=0.82,
+        )
+        for position, method in zip(positions, methods):
+            axis.scatter(
+                [position] * len(data[method]["values"]),
+                data[method]["values"],
+                color="#222222",
+                s=18,
+                zorder=3,
+            )
         axis.axhline(data["reference"], color="#222222", linestyle="--", linewidth=1.5, label="Reference")
-        axis.set_xticks([0, 1], ["No replay", "Replay 8"])
+        axis.set_xticks(positions, [labels[method] for method in methods], rotation=12)
         axis.set_title(METRICS[metric][0])
         axis.grid(axis="y", alpha=0.25)
     axes.flat[0].legend(frameon=False)
@@ -160,28 +191,44 @@ def write_plot(summary: dict, path: Path) -> None:
 def main() -> None:
     args = parse_args()
     pairs = []
-    for seed, no_replay_path, replay_path in args.pair:
-        with Path(no_replay_path).open(encoding="utf-8") as handle:
-            no_replay = json.load(handle)
-        with Path(replay_path).open(encoding="utf-8") as handle:
-            replay = json.load(handle)
-        pairs.append({"seed": int(seed), "no_replay": no_replay, "positive_replay_8": replay})
+    methods = ["no_replay", "positive_replay_8"]
+    rows = args.pair
+    if args.triplet:
+        methods.append("mixed_replay_8")
+        rows = args.triplet
+    for row in rows:
+        seed, *paths = row
+        pair = {"seed": int(seed)}
+        for method, path in zip(methods, paths):
+            with Path(path).open(encoding="utf-8") as handle:
+                pair[method] = json.load(handle)
+        pairs.append(pair)
 
     by_metric = {}
     for metric in METRICS:
-        no_replay_values = [metric_value(pair["no_replay"], metric) for pair in pairs]
-        replay_values = [metric_value(pair["positive_replay_8"], metric) for pair in pairs]
-        differences = [replay - no_replay for no_replay, replay in zip(no_replay_values, replay_values)]
-        by_metric[metric] = {
-            "no_replay": sample_stats(no_replay_values),
-            "positive_replay_8": sample_stats(replay_values),
-            "paired_difference_replay_minus_no_replay": sample_stats(differences),
-            "reference": reference_value(pairs[0]["no_replay"], metric),
+        method_values = {
+            method: [metric_value(pair[method], metric) for pair in pairs]
+            for method in methods
         }
+        metric_summary = {
+            method: sample_stats(values) for method, values in method_values.items()
+        }
+        no_replay_values = method_values["no_replay"]
+        for method in methods[1:]:
+            differences = [
+                treatment - baseline
+                for baseline, treatment in zip(no_replay_values, method_values[method])
+            ]
+            metric_summary[f"paired_difference_{method}_minus_no_replay"] = sample_stats(
+                differences
+            )
+        metric_summary["reference"] = reference_value(pairs[0]["no_replay"], metric)
+        by_metric[metric] = metric_summary
 
     summary = {
         "seeds": [pair["seed"] for pair in pairs],
         "pair_count": len(pairs),
+        "methods": methods,
         "standard_deviation_definition": "sample standard deviation across independent seeds (n - 1 denominator)",
         "by_metric": by_metric,
     }
