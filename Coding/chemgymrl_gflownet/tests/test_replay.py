@@ -2,7 +2,12 @@ from types import SimpleNamespace
 
 import torch
 
-from chemgymrl_gflownet import PercentileMixedReplayBuffer, PositiveRewardReplayBuffer
+from chemgymrl_gflownet import (
+    FixedTailReplayBuffer,
+    OfflineFirstDataSource,
+    PercentileMixedReplayBuffer,
+    PositiveRewardReplayBuffer,
+)
 from gflownet.config import Config
 
 
@@ -75,3 +80,75 @@ def test_mixed_replay_retains_valid_entries_across_reward_categories():
     assert len(replay) == 3
     assert replay.total_seen == 4
     assert replay.total_retained == 3
+
+
+def test_fixed_tail_replay_waits_for_both_sides_of_threshold():
+    replay = FixedTailReplayBuffer(
+        replay_config(capacity=16),
+        raw_reward_threshold=0.1,
+    )
+    for raw_reward in (-0.1, 0.0, 0.05, 0.1, 0.11, 0.12, 0.13):
+        replay.push(*replay_entry(raw_reward))
+
+    assert not replay.can_sample(8)
+    assert replay.last_tail_pool_size == 3
+    assert replay.last_non_tail_pool_size == 4
+
+    replay.push(*replay_entry(0.14))
+
+    assert replay.can_sample(8)
+
+
+def test_fixed_tail_replay_samples_four_from_each_pool_without_replacement():
+    replay = FixedTailReplayBuffer(
+        replay_config(capacity=16),
+        raw_reward_threshold=0.1,
+    )
+    rewards = (-0.2, -0.1, 0.0, 0.1, 0.11, 0.12, 0.13, 0.14)
+    for raw_reward in rewards:
+        replay.push(*replay_entry(raw_reward))
+
+    trajectories, _, properties, _, _ = replay.sample(8)
+
+    assert replay.last_tail_sample_count == 4
+    assert replay.last_non_tail_sample_count == 4
+    assert torch.all(properties[:4, 1] > 0.1)
+    assert torch.all(properties[4:, 1] <= 0.1)
+    assert len(set(properties[:, 1].tolist())) == 8
+    assert all(not trajectory["is_online"] for trajectory in trajectories)
+
+
+def test_fixed_tail_replay_does_not_evict_rare_tail_with_non_tail_entries():
+    replay = FixedTailReplayBuffer(
+        replay_config(capacity=8),
+        raw_reward_threshold=0.1,
+    )
+    for raw_reward in (0.11, 0.12, 0.13, 0.14):
+        replay.push(*replay_entry(raw_reward))
+    for raw_reward in range(20):
+        replay.push(*replay_entry(-float(raw_reward)))
+
+    _, _, properties, _, _ = replay.sample(8)
+
+    assert len(replay) == 8
+    assert torch.all(properties[:4, 1] > 0.1)
+    assert torch.all(properties[4:, 1] <= 0.1)
+
+
+def test_offline_first_data_source_skips_fixed_tail_replay_during_warmup():
+    config = replay_config(capacity=16)
+    replay = FixedTailReplayBuffer(config, raw_reward_threshold=0.1)
+    for raw_reward in (-0.1, 0.0, 0.05, 0.1, 0.11, 0.12, 0.13):
+        replay.push(*replay_entry(raw_reward))
+    source = object.__new__(OfflineFirstDataSource)
+    source.active = True
+    source.cfg = config
+    source.replay_buffer = replay
+    source.iterators = []
+    source.do_sample_replay(8)
+    iterator = source.iterators[0]()
+
+    trajectories, batch_info = next(iterator)
+
+    assert trajectories == []
+    assert batch_info == {}

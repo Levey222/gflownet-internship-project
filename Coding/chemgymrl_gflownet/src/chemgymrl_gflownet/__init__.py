@@ -19,6 +19,7 @@ from .procedure_gflownet import (
 from .reproducibility import seed_process
 from .tail_reward import terminal_log_rewards, terminal_positive_rewards
 from .replay import (
+    FixedTailReplayBuffer,
     OfflineFirstDataSource,
     PercentileMixedReplayBuffer,
     PositiveRewardReplayBuffer,
@@ -35,6 +36,7 @@ __all__ = [
     "ChemGymRLProcedureTrainer",
     "FictReactProcedureBridge",
     "FixedLengthSeqTransformerGFN",
+    "FixedTailReplayBuffer",
     "OfflineFirstDataSource",
     "PercentileMixedReplayBuffer",
     "PositiveRewardReplayBuffer",

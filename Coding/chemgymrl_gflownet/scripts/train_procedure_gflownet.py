@@ -41,11 +41,13 @@ def parse_args() -> argparse.Namespace:
     replay_group = parser.add_mutually_exclusive_group()
     replay_group.add_argument("--positive-replay", action="store_true")
     replay_group.add_argument("--mixed-replay", action="store_true")
+    replay_group.add_argument("--fixed-tail-replay", action="store_true")
     parser.add_argument("--replay-capacity", type=int, default=512)
     parser.add_argument("--replay-warmup", type=int, default=1)
     parser.add_argument("--replay-batch-size", type=int, default=16)
     parser.add_argument("--mixed-replay-top-fraction", type=float, default=0.1)
     parser.add_argument("--mixed-replay-top-sample-fraction", type=float, default=0.5)
+    parser.add_argument("--fixed-tail-replay-fraction", type=float, default=0.5)
     parser.add_argument("--log-dir", type=Path)
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
@@ -77,6 +79,14 @@ def parse_args() -> argparse.Namespace:
         parser.error("--mixed-replay-top-fraction must be between 0 and 1")
     if not 0 < args.mixed_replay_top_sample_fraction < 1:
         parser.error("--mixed-replay-top-sample-fraction must be between 0 and 1")
+    if not 0 < args.fixed_tail_replay_fraction < 1:
+        parser.error("--fixed-tail-replay-fraction must be between 0 and 1")
+    if args.fixed_tail_replay and args.tail_threshold is None:
+        parser.error("--fixed-tail-replay requires --tail-threshold")
+    if args.fixed_tail_replay and args.replay_batch_size < 2:
+        parser.error("--fixed-tail-replay requires --replay-batch-size of at least 2")
+    if args.fixed_tail_replay and args.replay_capacity < args.replay_batch_size:
+        parser.error("--replay-capacity must be at least --replay-batch-size")
     return args
 
 
@@ -107,7 +117,7 @@ def main() -> None:
     config.algo.valid_num_from_policy = args.batch_size
     config.cond.temperature.sample_dist = "constant"
     config.cond.temperature.dist_params = [1.0]
-    if args.positive_replay or args.mixed_replay:
+    if args.positive_replay or args.mixed_replay or args.fixed_tail_replay:
         config.replay.use = True
         config.replay.capacity = args.replay_capacity
         config.replay.warmup = args.replay_warmup
@@ -122,8 +132,10 @@ def main() -> None:
         tail_strength=args.tail_strength,
         positive_replay=args.positive_replay,
         mixed_replay=args.mixed_replay,
+        fixed_tail_replay=args.fixed_tail_replay,
         mixed_replay_top_fraction=args.mixed_replay_top_fraction,
         mixed_replay_top_sample_fraction=args.mixed_replay_top_sample_fraction,
+        fixed_tail_replay_fraction=args.fixed_tail_replay_fraction,
     )
     settings = {
         "steps": args.steps,
@@ -141,9 +153,11 @@ def main() -> None:
         ),
         "positive_replay": args.positive_replay,
         "mixed_replay": args.mixed_replay,
+        "fixed_tail_replay": args.fixed_tail_replay,
+        "fixed_tail_replay_fraction": args.fixed_tail_replay_fraction,
         "replay_batch_size": (
             args.replay_batch_size
-            if args.positive_replay or args.mixed_replay
+            if args.positive_replay or args.mixed_replay or args.fixed_tail_replay
             else 0
         ),
         "validation_batches": args.validation_batches,

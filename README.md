@@ -127,6 +127,22 @@ Coding/.venv/bin/python Coding/chemgymrl_gflownet/scripts/train_procedure_gflown
   --log-dir Coding/chemgymrl_gflownet/logs/upper_tail_seed0
 ```
 
+The controlled follow-up keeps that target fixed and adds four discovered tail
+and four discovered non-tail trajectories to each active training update:
+
+```bash
+Coding/.venv/bin/python Coding/chemgymrl_gflownet/scripts/train_procedure_gflownet.py \
+  --steps 1000 --batch-size 32 --seed 0 --device cpu \
+  --reward-scale 0.05 --tail-threshold 0.10 --tail-strength 0.25 \
+  --fixed-tail-replay --replay-batch-size 8 --replay-capacity 512 \
+  --fixed-tail-replay-fraction 0.5 \
+  --validate-every 100 --validation-batches 1 --final-batches 32 \
+  --log-dir Coding/chemgymrl_gflownet/logs/upper_tail_replay_seed0
+```
+
+Replay starts only after four examples have been discovered on each side of the
+threshold. The replay trajectories do not require additional ChemGymRL calls.
+
 This is an adaptation of the upper-tail problem to a discrete GFlowNet terminal
 reward. It is not a reproduction of Wang et al.'s continuous-model fine-tuning
 algorithm.

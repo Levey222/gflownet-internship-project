@@ -26,6 +26,7 @@ from gflownet.utils.conditioning import TemperatureConditional
 
 from .bridge import ACTION_DIMENSION, DEFAULT_REWARD_SCALE, FictReactProcedureBridge
 from .replay import (
+    FixedTailReplayBuffer,
     OfflineFirstDataSource,
     PercentileMixedReplayBuffer,
     PositiveRewardReplayBuffer,
@@ -150,22 +151,28 @@ class ChemGymRLProcedureTrainer(StandardOnlineTrainer):
         control_bins: Sequence[Sequence[float]] | None = None,
         positive_replay: bool = False,
         mixed_replay: bool = False,
+        fixed_tail_replay: bool = False,
         replay_raw_reward_threshold: float = 0.0,
         mixed_replay_top_fraction: float = 0.1,
         mixed_replay_top_sample_fraction: float = 0.5,
+        fixed_tail_replay_fraction: float = 0.5,
         tail_threshold: float | None = None,
         tail_strength: float = 0.0,
         print_config: bool = True,
     ) -> None:
-        if positive_replay and mixed_replay:
-            raise ValueError("positive replay and mixed replay are mutually exclusive")
+        if sum((positive_replay, mixed_replay, fixed_tail_replay)) > 1:
+            raise ValueError("replay strategies are mutually exclusive")
+        if fixed_tail_replay and tail_threshold is None:
+            raise ValueError("fixed-tail replay requires a tail threshold")
         self.reward_scale = reward_scale
         self.control_bins = control_bins
         self.positive_replay = positive_replay
         self.mixed_replay = mixed_replay
+        self.fixed_tail_replay = fixed_tail_replay
         self.replay_raw_reward_threshold = replay_raw_reward_threshold
         self.mixed_replay_top_fraction = mixed_replay_top_fraction
         self.mixed_replay_top_sample_fraction = mixed_replay_top_sample_fraction
+        self.fixed_tail_replay_fraction = fixed_tail_replay_fraction
         self.tail_threshold = tail_threshold
         self.tail_strength = tail_strength
         super().__init__(config, print_config=print_config)
@@ -243,9 +250,17 @@ class ChemGymRLProcedureTrainer(StandardOnlineTrainer):
                 top_fraction=self.mixed_replay_top_fraction,
                 top_sample_fraction=self.mixed_replay_top_sample_fraction,
             )
+        elif self.fixed_tail_replay:
+            if not self.cfg.replay.use:
+                raise ValueError("fixed-tail replay requires config.replay.use")
+            self.replay_buffer = FixedTailReplayBuffer(
+                self.cfg,
+                raw_reward_threshold=self.tail_threshold,
+                tail_sample_fraction=self.fixed_tail_replay_fraction,
+            )
 
     def build_training_data_loader(self):
-        if not (self.positive_replay or self.mixed_replay):
+        if not (self.positive_replay or self.mixed_replay or self.fixed_tail_replay):
             return super().build_training_data_loader()
 
         model = self._wrap_for_mp(self.sampling_model)
@@ -275,15 +290,24 @@ class ChemGymRLProcedureTrainer(StandardOnlineTrainer):
         info = super().train_batch(batch, epoch_idx, batch_idx, train_it)
         if isinstance(
             self.replay_buffer,
-            (PositiveRewardReplayBuffer, PercentileMixedReplayBuffer),
+            (PositiveRewardReplayBuffer, PercentileMixedReplayBuffer, FixedTailReplayBuffer),
         ):
             offline_raw_rewards = batch.obj_props[: batch.num_offline, 1]
             info.update(
                 {
                     "replay_size": len(self.replay_buffer),
                     "replay_retained": self.replay_buffer.total_retained,
-                    "replay_raw_reward_avg": offline_raw_rewards.mean().item(),
-                    "replay_positive_fraction": (offline_raw_rewards > 0).float().mean().item(),
+                    "replay_active": float(batch.num_offline > 0),
+                    "replay_raw_reward_avg": (
+                        offline_raw_rewards.mean().item()
+                        if batch.num_offline
+                        else 0.0
+                    ),
+                    "replay_positive_fraction": (
+                        (offline_raw_rewards > 0).float().mean().item()
+                        if batch.num_offline
+                        else 0.0
+                    ),
                 }
             )
         if isinstance(self.replay_buffer, PercentileMixedReplayBuffer):
@@ -294,6 +318,16 @@ class ChemGymRLProcedureTrainer(StandardOnlineTrainer):
                     "replay_top_sample_count": self.replay_buffer.last_top_sample_count,
                     "replay_remainder_sample_count": self.replay_buffer.last_remainder_sample_count,
                     "replay_cutoff_raw_reward": self.replay_buffer.last_cutoff_raw_reward,
+                }
+            )
+        if isinstance(self.replay_buffer, FixedTailReplayBuffer):
+            info.update(
+                {
+                    "replay_tail_pool_size": self.replay_buffer.last_tail_pool_size,
+                    "replay_non_tail_pool_size": self.replay_buffer.last_non_tail_pool_size,
+                    "replay_tail_sample_count": self.replay_buffer.last_tail_sample_count,
+                    "replay_non_tail_sample_count": self.replay_buffer.last_non_tail_sample_count,
+                    "replay_tail_threshold": self.replay_buffer.raw_reward_threshold,
                 }
             )
         return info
