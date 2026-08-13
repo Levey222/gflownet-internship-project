@@ -567,6 +567,56 @@ The follow-up kept this target fixed and added controlled replay:
 
 The original-target experiments should continue to report distribution error, including total-variation error and exact target-mass coverage. These cannot be the main success criteria for the tail-shaped models because those models are intentionally trained towards a different distribution. The upper-tail comparison should instead report right-CVaR, top-100 hit rate, the number of unique top-100 procedures found, tail hits per simulator call, duplicate rate, mean raw reward and validity. Results should be reported across matched random seeds and with the same number of new ChemGymRL evaluations. This makes it possible to tell the difference between useful tail coverage and repeatedly generating one exceptional procedure.
 
+\subsection{How to read the results}
+
+\textbf{Run and GFlowNet terms}
+\begin{itemize}
+    \item \textbf{State, action and trajectory:} a state is the partly built molecule or procedure, an action adds the next part, and a trajectory is the complete sequence from the empty state to a finished object.
+    \item \textbf{Terminal reward:} the positive value assigned after a complete object has been generated. ChemGymRL first returns a raw result $r(x)$, which is transformed into the positive GFlowNet reward $R(x)$.
+    \item \textbf{Training step and batch:} one training step samples a batch of trajectories, calculates one loss and updates the model once. Batch size 32 means that 32 new trajectories are generated in that step.
+    \item \textbf{Simulator call:} one evaluation of a newly generated complete procedure in ChemGymRL. Replayed trajectories add neural-network updates but do not require another simulator call.
+    \item \textbf{Final samples:} procedures or molecules generated from the trained policy after training. They are separate from the samples used to update the model.
+    \item \textbf{Seed:} a fixed starting value for the random-number generators. Seeds 0, 17 and 42 give three independent but reproducible runs of the same configuration.
+    \item \textbf{On-policy and replay data:} on-policy trajectories are newly sampled from the current model. Replay trajectories are stored earlier trajectories shown to the loss again, so they are off-policy training data.
+    \item \textbf{TB loss:} the squared Trajectory Balance residual shown in the Technical Background. A lower value means the sampled trajectories balance more closely, but does not by itself prove that the full terminal distribution is correct.
+    \item \textbf{$Z$ and $\log Z$:} $Z$ is the partition function, or the sum of terminal rewards over the complete space. The model learns $\log Z$ because products in the balance equation are more stable when calculated as sums of logarithms.
+\end{itemize}
+
+\textbf{Reward and tail terms}
+\begin{itemize}
+    \item \textbf{Mean raw reward:} the average ChemGymRL terminal result before the positive GFlowNet reward transform. A higher mean is better in this test, but does not show diversity or target matching.
+    \item \textbf{Positive, zero and negative fractions:} the percentages of final samples with raw reward above, equal to, or below zero.
+    \item \textbf{Upper or right tail:} the rare high-reward end of the reward distribution. In the fixed-tail experiment it means procedures with $r(x)>0.10$.
+    \item \textbf{Defined-tail fraction:} the percentage of final samples above the fixed $0.10$ threshold. Repeated procedures are counted each time.
+    \item \textbf{Value-at-Risk and right-CVaR:} Value-at-Risk is a reward threshold at a chosen quantile. Right Conditional Value-at-Risk is the mean reward of samples beyond that threshold.
+    \item \textbf{Top-100 fraction:} the percentage of final samples belonging to the 100 highest-raw-reward procedures in the exact space. Repeats count each time.
+    \item \textbf{Unique tail and unique top-100 procedures:} the number of different procedures found in the fixed tail or exact top 100. Repeated generation of the same procedure increases the fraction metrics but not these counts.
+    \item \textbf{$\lambda$:} the strength of the fixed upper-tail bonus. Here $\lambda=0.25$ changes the intended terminal distribution, but does not change the TB equation.
+    \item \textbf{$\alpha$ and $\beta$ in the Wang equation:} $\alpha$ controls the penalty for moving away from a reference model, while $\beta$ sets the tail quantile. This $\beta$ is not the same as the reward-temperature $\beta$ used in the sEH runs.
+    \item \textbf{Fixed $\beta=4$ in the sEH runs:} every training example uses the same reward-temperature condition rather than drawing different temperatures. It controls reward concentration and is unrelated to the fixed-tail threshold of 0.10.
+\end{itemize}
+
+\textbf{Distribution and diversity metrics}
+\begin{itemize}
+    \item \textbf{Exact target or reference:} the distribution obtained by normalising the known rewards of all 19,683 procedures. It describes the ideal result for the stated terminal reward, not another trained model.
+    \item \textbf{Expected direct-target value:} the average result expected if 1,024 procedures were sampled directly from the exact target. It accounts for repeated draws when reporting uniqueness and duplication.
+    \item \textbf{Category TV error:} total-variation error between the generated and target proportions of negative, zero and positive procedures. It is one half of the sum of their absolute proportion differences. Zero is a perfect category-level match.
+    \item \textbf{Target mass covered:} the exact target probabilities of the unique generated procedures added together. Finding a new important procedure increases coverage, while generating the same procedure again does not.
+    \item \textbf{Unique procedures:} the number of different complete nine-token procedures among the 1,024 final samples. These are different control sequences, not different molecules.
+    \item \textbf{Duplicate fraction:} $1-(\text{number unique}/\text{number sampled})$. It is the proportion of final draws which do not add a new procedure.
+    \item \textbf{Validity:} whether a trajectory completed legally and produced a finite simulator or proxy result. It does not mean that a molecule is safe, synthesizable or experimentally active.
+    \item \textbf{Mean $\pm$ sample standard deviation:} the mean combines the three seed results. The sample standard deviation shows how much those seed values vary; the black points in the plots show the individual seeds.
+    \item \textbf{Dashed reference line:} the exact target value, or the expected value from 1,024 direct target samples where uniqueness makes an expectation necessary.
+\end{itemize}
+
+\textbf{sEH molecular terms}
+\begin{itemize}
+    \item \textbf{sEH proxy:} the supplied neural network which predicts a molecule's sEH score. It is a computational reward, not a laboratory binding measurement.
+    \item \textbf{Canonical SMILES:} a standardised text representation used to identify the same molecular graph consistently and count exact duplicates.
+    \item \textbf{Tanimoto similarity:} similarity between two molecular fingerprints. Zero means no shared fingerprint features and one means identical fingerprints under that representation.
+    \item \textbf{Bemis--Murcko scaffold:} the main ring-and-linker framework after side groups are removed. Scaffold uniqueness measures framework variety rather than complete-molecule variety.
+\end{itemize}
+
 \section{Results}
 
 Results are reported as the mean and sample standard deviation across three seeds unless a result is explicitly labelled as a single-seed diagnostic. The reference column is either an exact target value or the expected value from 1,024 direct samples from that target.
