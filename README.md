@@ -143,6 +143,21 @@ Coding/.venv/bin/python Coding/chemgymrl_gflownet/scripts/train_procedure_gflown
 Replay starts only after four examples have been discovered on each side of the
 threshold. The replay trajectories do not require additional ChemGymRL calls.
 
+To separate the effect of reward shaping from the effect of replay, the matched
+control uses the original terminal target with the same replay settings. The
+threshold classifies stored procedures for replay but does not alter their
+terminal rewards because the tail strength remains zero:
+
+```bash
+Coding/.venv/bin/python Coding/chemgymrl_gflownet/scripts/train_procedure_gflownet.py \
+  --steps 1000 --batch-size 32 --seed 0 --device cpu \
+  --reward-scale 0.05 --tail-threshold 0.10 \
+  --fixed-tail-replay --replay-batch-size 8 --replay-capacity 512 \
+  --fixed-tail-replay-fraction 0.5 \
+  --validate-every 100 --validation-batches 1 --final-batches 32 \
+  --log-dir Coding/chemgymrl_gflownet/logs/baseline_target_replay_seed0
+```
+
 This is an adaptation of the upper-tail problem to a discrete GFlowNet terminal
 reward. It is not a reproduction of Wang et al.'s continuous-model fine-tuning
 algorithm.

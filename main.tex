@@ -1,6 +1,7 @@
 \documentclass{article}
 \usepackage{graphicx} % Required for inserting images
 \usepackage{amsmath}
+\usepackage{float}
 \usepackage[margin=1.15in]{geometry}
 \usepackage[round,authoryear]{natbib}
 \usepackage[hidelinks]{hyperref}
@@ -484,7 +485,7 @@ The scale 0.05 controls concentration. It is not an intermediate ChemGymRL rewar
 
 \subsection{Experimental conditions}
 
-I compared four main conditions. Standard TB used 32 new on-policy procedures per step. Positive replay added eight stored positive trajectories. A third condition changed the terminal target to favour the upper tail but still used on-policy training only. That run learnt almost none of the tail, so I added an exploratory follow-up with the same shaped target and a four-plus-four replay split: four stored tail trajectories and four stored non-tail trajectories. Both pools were filled by procedures found during training. Replay stayed off until there were at least four examples on each side of the threshold. The follow-up tests whether seeing discovered tail procedures again is enough to help; it does not start with an exhaustive list of tail procedures.
+I compared five main conditions. Standard TB used 32 new on-policy procedures per step. Positive replay added eight stored positive trajectories. A third condition changed the terminal target to favour the upper tail but still used on-policy training only. That run learnt almost none of the tail, so I added an exploratory follow-up with a four-plus-four replay split: four stored tail trajectories and four stored non-tail trajectories. Both pools were filled by procedures found during training. Replay stayed off until there were at least four examples on each side of the threshold. I ran this fixed-tail replay with both the original and shaped targets. This final pair separates the target change from the effect of seeing discovered tail procedures again; neither run starts with an exhaustive list of tail procedures.
 
 All main conditions used 1,000 optimisation steps, seeds 0, 17 and 42, and 1,024 final samples per trained model. Replay conditions used the same number of new on-policy procedures as their no-replay controls, so replay did not add simulator evaluations. It did add neural-network training trajectories. Full model and optimiser settings are listed in Appendix~\ref{app:settings}.
 
@@ -542,11 +543,20 @@ The exploratory replay follow-up gave a very different result. Tail samples rose
     \label{fig:main-fixed-tail-replay}
 \end{figure}
 
+The matched original-target control shows what the shaping term added once replay was already present. Under the original target, fixed-tail replay produced a mean raw reward of $0.0399\pm0.0078$ and a tail fraction of $22.85\%\pm2.72\%$. With the shaped target these rose to $0.0541\pm0.0100$ and $28.68\%\pm3.88\%$. The paired tail-fraction increase was 5.83 percentage points and was positive for every seed. This gain was concentration rather than broader tail coverage: the number of different tail procedures changed from $81.3\pm4.2$ to $79.7\pm0.6$, while duplicates rose from $17.48\%\pm2.49\%$ to $22.88\%\pm3.32\%$.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\linewidth]{figures/chemgymrl_matched_fixed_tail_target_control.png}
+    \caption{Original and shaped terminal targets with the same fixed-tail replay. Bars show three-seed means, error bars show sample standard deviations, points show individual seeds, and dashed markers show each target's exact expectation. Shaping increased tail frequency and mean reward, but did not increase the number of different tail procedures.}
+    \label{fig:main-matched-tail-control}
+\end{figure}
+
 \section{Discussion}
 
 The two questions produced different answers. Standard TB had not learnt the original reward distribution within the fixed budget. Positive replay reused informative outcomes and improved both target-mass coverage and category agreement. It also overrepresented positive procedures and repeated more of them. This is consistent with the finite-training problem studied by \citet{shen2023training}, but it also shows that a positive-only buffer changes the finite learnt distribution.
 
-For the upper-tail test, the shaped reward gave a clear target but on-policy training almost never reached its 117 tail procedures. Replaying tail and non-tail examples brought the final tail frequency and unique tail count close to their exact references. The relevant point is not only that reward increased. The final samples moved towards a distribution calculated before training, and they still contained nearly the expected number of different tail procedures.
+For the upper-tail test, the shaped reward gave a clear target but on-policy training almost never reached its 117 tail procedures. Replaying tail and non-tail examples brought the final tail frequency and unique tail count close to their exact references. The matched control changes the interpretation slightly. Replay was enough to recover a broad tail under the original target. Shaping then placed more probability on that tail, but it did not find more kinds of tail procedure and it produced more duplicates. Reward shaping and rare-state exposure did different jobs in this benchmark.
 
 The comparison with \citet{wang2026tail} has to remain limited. They fine-tune a pre-trained continuous model with a CVaR-derived objective and a KL anchor. I trained a discrete GFlowNet from scratch with a manually shaped terminal reward. The experiment is Wang-inspired, not an implementation of Tail-aware Flow Fine-Tuning. What carries over is the upper-tail question and the excess-reward weighting, not the full algorithm.
 
@@ -556,13 +566,13 @@ The ChemGymRL bridge confirms that a simulated outcome can be used as a terminal
 
 The procedure task is fictitious, discrete and exactly enumerable. It has only nine controls with three values each, and the simulator's twenty internal time steps are not GFlowNet decisions. Results cannot be interpreted as toxin neutralisation, laboratory feasibility or arbitrary molecule evaluation.
 
-The study uses three seeds, one 1,000-step budget and one selected tail strength. The exact sweep used to choose $\lambda=0.25$ is possible only because the state space is small. The fixed-tail replay follow-up uses a threshold chosen with exhaustive knowledge, although both replay pools contain only on-policy discoveries. It establishes that controlled re-exposure can solve the finite benchmark after enough tail examples have been encountered, but does not establish how a useful threshold or enough examples should be found in a large unknown space.
+The study uses three seeds, one 1,000-step budget and one selected tail strength. The exact sweep used to choose $\lambda=0.25$ is possible only because the state space is small. The fixed-tail replay follow-up uses a threshold chosen with exhaustive knowledge, although both replay pools contain only on-policy discoveries. It establishes that controlled re-exposure can solve the finite benchmark after enough tail examples have been encountered. It does not establish how a useful threshold or enough examples should be found in a large unknown space, and the matched control shows that the selected shaping term trades some diversity for extra tail frequency.
 
 Simulator calls were matched, but optimisation work was not: replay conditions process eight additional stored trajectories per update. Positive replay is not an exact reproduction of Shen et al., and the upper-tail condition is not a reproduction of Wang et al. The mixed rolling-percentile replay diagnostic was highly seed dependent and is reported in Appendix~\ref{app:additional-results}, not treated as a main result. Statistical claims remain descriptive because only three seeds were run.
 
 \section{Conclusion and Future Work}
 
-The starting question was whether a ChemGymRL outcome could act as the terminal reward for a TB GFlowNet, particularly in the rare high-reward part of the procedure space. It can, but the finite-training behaviour matters. Standard training remained far from the known target. Replay corrected much of this under the same simulator budget, although positive-only replay overshot and reduced diversity. Tail shaping alone also failed. With the same shaped target and a controlled mix of tail and non-tail replay, the final policy recovered most of the intended tail mass and nearly the expected number of distinct tail procedures.
+The starting question was whether a ChemGymRL outcome could act as the terminal reward for a TB GFlowNet, particularly in the rare high-reward part of the procedure space. It can, but the finite-training behaviour matters. Standard training remained far from the known target. Replay corrected much of this under the same simulator budget, although positive-only replay overshot and reduced diversity. Tail shaping alone also failed. Controlled replay recovered a broad tail under both terminal targets. Adding the shaped target increased tail frequency by 5.83 percentage points, but did not increase the number of distinct tail procedures.
 
 The next experiment should not rely on a threshold chosen from exhaustive enumeration. A larger task could use an initial discovery run, followed by diversity-aware replay, or estimate a quantile from a frozen reference sample. A frozen baseline policy would also provide the anchor needed for a closer Wang-style comparison. Any larger run should keep simulator calls equal and report tail hits, unique tail coverage, reward-band error, validity and duplicates. A full Wang-style test would still need pre-training and an explicit regularisation term, not only a shaped reward.
 
@@ -571,7 +581,7 @@ The next experiment should not rely on a threshold chosen from exhaustive enumer
 \section{Experimental Settings}
 \label{app:settings}
 
-\begin{table}[htbp]
+\begin{table}[H]
 \centering
 \begin{tabular}{l l}
 \hline
@@ -619,7 +629,7 @@ Tail strength & $\lambda=0.25$ \\
 
 \subsection{Original-target replay values}
 
-\begin{table}[htbp]
+\begin{table}[H]
 \centering
 \small
 \begin{tabular}{l c c c}
@@ -640,7 +650,7 @@ Duplicate fraction & $3.48\%\pm0.25\%$ & $22.04\%\pm4.22\%$ & $15.66\%$ \\
 
 \subsection{Upper-tail values}
 
-\begin{table}[htbp]
+\begin{table}[H]
 \centering
 \small
 \begin{tabular}{l c c c}
@@ -650,11 +660,31 @@ Metric & Shaped, no replay & Fixed-tail replay & Shaped target \\
 Mean raw reward & $-0.0058\pm0.0022$ & $0.0541\pm0.0100$ & $0.0647$ \\
 Defined-tail fraction & $0.098\%\pm0.098\%$ & $28.68\%\pm3.88\%$ & $31.30\%$ \\
 Unique tail procedures & $1.0\pm1.0$ & $79.7\pm0.6$ & $83.2$ \\
-Top-100 fraction & $0.065\%\pm0.056\%$ & $27.44\%\pm4.18\%$ & $30.50\%$ \\
+Top-100 fraction & $0.065\%\pm0.056\%$ & $27.54\%\pm3.75\%$ & $30.50\%$ \\
 Duplicate fraction & $3.91\%\pm0.64\%$ & $22.88\%\pm3.32\%$ & $24.77\%$ \\
 \hline
 \end{tabular}
 \caption{Upper-tail results across three seeds. Unique-count and duplicate references are direct-target expectations.}
+\end{table}
+
+\subsection{Matched fixed-tail replay control}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{l c c c}
+\hline
+Metric & Original target & Shaped target & Paired change \\
+\hline
+Mean raw reward & $0.0399\pm0.0078$ & $0.0541\pm0.0100$ & $+0.0142\pm0.0023$ \\
+Defined-tail fraction & $22.85\%\pm2.72\%$ & $28.68\%\pm3.88\%$ & $+5.83\pm1.22$ pp \\
+Unique tail procedures & $81.3\pm4.2$ & $79.7\pm0.6$ & $-1.7\pm3.8$ \\
+Top-100 fraction & $21.71\%\pm2.49\%$ & $27.54\%\pm3.75\%$ & $+5.83\pm1.30$ pp \\
+Unique top-100 procedures & $72.0\pm3.6$ & $70.0\pm2.0$ & $-2.0\pm3.6$ \\
+Duplicate fraction & $17.48\%\pm2.49\%$ & $22.88\%\pm3.32\%$ & $+5.40\pm1.14$ pp \\
+\hline
+\end{tabular}
+\caption{Matched three-seed control with the same fixed-tail replay in both columns. The paired change is shaped minus original. Here ``pp'' means percentage points.}
 \end{table}
 
 \subsection{Mixed replay diagnostic}

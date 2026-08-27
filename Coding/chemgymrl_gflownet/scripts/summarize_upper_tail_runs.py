@@ -47,6 +47,11 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--plot-title",
+        default="ChemGymRL upper-tail target experiment",
+        help="title used above the final-metric comparison plot",
+    )
     return parser.parse_args()
 
 
@@ -153,7 +158,7 @@ def write_csv(summary: dict, path: Path) -> None:
                 )
 
 
-def plot_final_metrics(summary: dict, path: Path) -> None:
+def plot_final_metrics(summary: dict, path: Path, title: str) -> None:
     figure, axes = plt.subplots(2, 3, figsize=(12.5, 7.5))
     colours = ("#2878B5", "#0B6E4F")
     for axis, (metric, label) in zip(axes.flat, METRICS.items()):
@@ -177,7 +182,7 @@ def plot_final_metrics(summary: dict, path: Path) -> None:
         axis.set_title(label)
         axis.grid(axis="y", alpha=0.22)
     figure.suptitle(
-        "ChemGymRL upper-tail target experiment, mean and sample SD across three seeds\n"
+        f"{title}, mean and sample SD across three seeds\n"
         "Coloured dashed markers show each method's exact target expectation"
     )
     figure.tight_layout()
@@ -279,6 +284,7 @@ def main() -> None:
         "standard_deviation_definition": (
             "sample standard deviation across independent seeds (n - 1 denominator)"
         ),
+        "plot_title": args.plot_title,
         "final_metrics": final,
         "training_exposure": exposure,
         "per_seed": pairs,
@@ -288,7 +294,11 @@ def main() -> None:
         json.dump(summary, output_file, indent=2)
         output_file.write("\n")
     write_csv(summary, args.output_dir / "upper_tail_summary.csv")
-    plot_final_metrics(summary, args.output_dir / "upper_tail_final_comparison.png")
+    plot_final_metrics(
+        summary,
+        args.output_dir / "upper_tail_final_comparison.png",
+        args.plot_title,
+    )
     plot_training_exposure(summary, args.output_dir / "upper_tail_training_exposure.png")
     print(json.dumps({key: summary[key] for key in summary if key != "per_seed"}, indent=2))
 

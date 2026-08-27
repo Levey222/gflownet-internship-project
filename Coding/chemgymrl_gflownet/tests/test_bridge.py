@@ -73,6 +73,22 @@ def test_upper_tail_reward_changes_only_values_above_the_threshold():
     assert above == pytest.approx(np.exp(3.25))
 
 
+def test_zero_tail_strength_recovers_baseline_with_replay_threshold():
+    raw_rewards = (-0.05, 0.05, 0.15)
+    with FictReactProcedureBridge(reward_scale=0.05) as baseline_bridge:
+        baseline = [baseline_bridge.to_positive_reward(value) for value in raw_rewards]
+    with FictReactProcedureBridge(
+        reward_scale=0.05,
+        tail_threshold=0.1,
+        tail_strength=0.0,
+    ) as replay_control_bridge:
+        replay_control = [
+            replay_control_bridge.to_positive_reward(value) for value in raw_rewards
+        ]
+
+    np.testing.assert_array_equal(replay_control, baseline)
+
+
 def test_upper_tail_reward_requires_a_threshold():
     with pytest.raises(ValueError, match="tail_threshold"):
         FictReactProcedureBridge(tail_strength=0.25)

@@ -63,8 +63,15 @@ def parse_args() -> argparse.Namespace:
         parser.error("--tail-threshold must be finite")
     if args.tail_strength > 0 and args.tail_threshold is None:
         parser.error("--tail-threshold is required when --tail-strength is positive")
-    if args.tail_threshold is not None and args.tail_strength == 0:
-        parser.error("--tail-strength must be positive when --tail-threshold is supplied")
+    if (
+        args.tail_threshold is not None
+        and args.tail_strength == 0
+        and not args.fixed_tail_replay
+    ):
+        parser.error(
+            "--tail-strength must be positive when --tail-threshold is supplied "
+            "without --fixed-tail-replay"
+        )
     if args.validation_batches < 1:
         parser.error("--validation-batches must be at least 1")
     if args.final_batches < 0:
