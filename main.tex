@@ -2,12 +2,13 @@
 \usepackage{graphicx} % Required for inserting images
 \usepackage{amsmath}
 \usepackage[margin=1.15in]{geometry}
+\usepackage[round,authoryear]{natbib}
 \usepackage[hidelinks]{hyperref}
 \setcounter{tocdepth}{2}
 
-\title{GFlowNet Literature Review}
-\author{leventevoravecz }
-\date{July 2026}
+\title{Replay and Upper-Tail Learning in GFlowNets\\for Simulated Chemical Procedures}
+\author{Levente Oravecz}
+\date{August 2026}
 
 \begin{document}
 
@@ -16,6 +17,7 @@
 \tableofcontents
 \clearpage
 
+\iffalse
 \part{Working Notes and Results}
 
 \section{Planned literature review structure}
@@ -387,6 +389,289 @@ Figure~\ref{fig:tb-beta4-histogram} is another way of looking at the same run. M
 \end{itemize}
 
 \clearpage
+\fi
+
+% Historical working material remains in the two \iffalse blocks in this file.
+\section*{Abstract}
+\addcontentsline{toc}{section}{Abstract}
+
+Generative Flow Networks (GFlowNets) have been used to generate varied, high-scoring molecules, but less is known about how well finite Trajectory-Balance training learns a rare upper tail when the reward comes from a procedure simulator rather than a static property predictor. This project connects a GFlowNet to a small ChemGymRL environment and treats the outcome of a completed simulated procedure as its terminal reward. The procedure space contains $3^9=19{,}683$ possible procedures, so the intended reward-proportional distribution can be calculated exactly. Standard training, positive replay, a Wang-inspired upper-tail target, and an exploratory fixed-tail replay follow-up were compared under matched simulator-evaluation budgets across three random seeds. Standard training badly under-represented useful procedures. Positive replay improved target-mass coverage from $5.06\%$ to $21.52\%$, but oversampled positive procedures and increased repetition. Changing the upper-tail target without replay also failed: only $0.098\%$ of final samples reached a region assigned $31.30\%$ exact target probability. Fixed-tail replay raised this to $28.68\%\pm3.88\%$ and recovered $79.7\pm0.6$ distinct tail procedures, close to the direct-target expectation of 83.2. The result is a controlled proof of concept, not evidence for arbitrary chemistry. It shows that defining an upper-tail target and giving the model enough exposure to that tail are separate requirements in finite GFlowNet training.
+
+\section{Introduction}
+
+The main gap addressed by this project is not whether GFlowNets can generate molecules. That has already been demonstrated with property predictors, docking scores, biological sequence rewards, reaction templates and purchasable building blocks \citep{bengio2021flow,koziarski2024rgfn,cretu2025synflownet,seo2025rxnflow}. The narrower problem is whether a GFlowNet can learn a distribution over \emph{complete simulated procedures}, especially when high-reward outcomes form a rare part of the terminal space. Within the literature reviewed here, no study was found which uses a completed ChemGymRL procedure outcome as the terminal reward of a Trajectory-Balance GFlowNet.
+
+This matters because a correct GFlowNet objective only describes the desired distribution at convergence. It does not guarantee that a finite neural network will see enough rare outcomes to learn them. A model can show a falling loss and improving mean reward while still assigning almost no probability to the intended upper tail. It can also increase the number of high-reward samples by repeatedly generating a small set, which is less useful in design problems where several different candidates are wanted.
+
+The project therefore separates two questions. First, can standard Trajectory Balance learn the original simulator-defined reward distribution, and does replay help under the same number of simulator evaluations? Second, if the terminal target is deliberately changed to favour an upper tail, can that target be learned without collapsing onto a few procedures? The working hypothesis is that replay will improve finite-training coverage of rare outcomes, but that replay composition must be controlled to avoid excessive concentration.
+
+The main contributions are:
+\begin{itemize}
+    \item a tested bridge which converts a complete GFlowNet procedure into a ChemGymRL simulation and returns a positive terminal reward;
+    \item an exactly enumerable benchmark, allowing learned samples to be compared with the true target rather than judged only by loss or mean reward;
+    \item a three-seed comparison of standard training and replay under matched simulator-evaluation budgets;
+    \item a Wang-inspired upper-tail target and an exploratory controlled-replay follow-up which separates target design from rare-state exposure.
+\end{itemize}
+
+\section{Background and Literature Review}
+
+This is a focused narrative review of primary GFlowNet, molecular-generation, replay, tail-optimisation and digital-chemistry papers published between 2021 and August 2026. Papers were selected when they clarified the target distribution, the source of reward information, the use of off-policy data, upper-tail evaluation, or the type of chemistry being represented. Conference proceedings and journal versions were preferred over summaries. The review is not claimed to be an exhaustive systematic search.
+
+\subsection{GFlowNets, reinforcement learning and terminal rewards}
+
+In ordinary reinforcement learning, an agent observes a state, chooses an action and receives rewards, normally with the aim of maximising expected cumulative reward. A GFlowNet also learns a policy over sequential actions, but its purpose is different \citep{bengio2021flow,bengio2023foundations}. It constructs terminal objects $x$ so that their sampling probability is proportional to a positive reward:
+\begin{equation}
+P(x)=\frac{R(x)}{Z}, \qquad Z=\sum_{x'}R(x').
+\end{equation}
+The normalising constant $Z$ is the total terminal reward. A high-reward object should be sampled more often, but the target still contains multiple objects rather than only the estimated optimum.
+
+A construction process forms a directed acyclic graph of states. The forward policy $P_F$ adds actions, while the backward policy $P_B$ describes valid reverse steps. Trajectory Balance (TB) checks an entire trajectory $\tau=(s_0,\ldots,s_n=x)$ \citep{malkin2022trajectory}:
+\begin{equation}
+\mathcal{L}_{\mathrm{TB}}(\tau)=\left(
+\log Z+\sum_t\log P_F(s_{t+1}\mid s_t)
+-\log R(x)-\sum_t\log P_B(s_t\mid s_{t+1})
+\right)^2.
+\end{equation}
+This is not a Bellman error, cross-entropy objective or standard policy-gradient loss. It requires the complete forward probability, backward probability, terminal reward and learned $Z$ to balance. The reward is terminal because ChemGymRL can only evaluate the outcome after all procedure controls have been specified.
+
+Replay means training again on previously generated trajectories. It does not change the reward and it does not require another simulator call when the stored terminal result is reused. The policy parameters can still change because the stored trajectory's current forward probabilities are evaluated again in the TB equation. Replay is therefore extra optimisation work, not free computation.
+
+\subsection{Molecular and reaction-aware GFlowNets}
+
+\citet{bengio2021flow} introduced GFlowNets as a way to produce diverse high-reward candidates and demonstrated fragment-based molecular generation using a learned soluble epoxide hydrolase (sEH) proxy. Later work applied related objectives to biological sequences and larger molecular spaces. These studies establish that reward-proportional generation can be useful when several strong candidates are wanted, but most rewards remain static predictors or computational oracles rather than the outcome of a time-dependent procedure.
+
+Reaction-aware models address a different limitation. RGFN, SynFlowNet and RxnFlow construct molecules through reaction templates and available building blocks, improving route feasibility and restricting the search to synthesizable products \citep{koziarski2024rgfn,cretu2025synflownet,seo2025rxnflow}. Genetic-guided and Local Search GFlowNets use external refinement or off-policy trajectories to find high-reward molecules more efficiently \citep{kim2024genetic,kim2024local}. These methods show that action-space design and access to useful training data matter, but generating a reaction pathway is not the same as simulating quantities, temperature, timing, competing products and a final vessel composition.
+
+ChemGymRL provides authored virtual reaction, extraction and distillation environments through the Gymnasium interface \citep{beeler2024chemgymrl}. A simulated vessel can change over time and return an outcome to an agent. Its scope is limited to the materials, dynamics and controls encoded in each environment; it is not a universal chemistry engine and cannot evaluate an arbitrary generated molecule. The present project uses that limitation deliberately by starting with a small environment whose complete distribution can be checked.
+
+\subsection{Finite training, replay and rare outcomes}
+
+\citet{shen2023training} showed that a practical GFlowNet can underfit its reward distribution for a long time even when the objective is theoretically correct. Their reward-prioritised replay method reuses evaluated terminal objects and samples new backward trajectories for further updates. Importantly, their main replay scheme includes both the highest-reward stored objects and examples from the rest of the buffer. This supports replay as a sample-efficiency tool, but also treats replay composition as part of the method rather than a neutral detail.
+
+Other work reaches a similar conclusion by different routes. Local Search GFlowNets rebuild part of an existing object \citep{kim2024local}, while Genetic-guided GFlowNets obtain off-policy molecular data from a genetic search \citep{kim2024genetic}. These methods can improve access to high-reward regions, but they do not by themselves prove that the final policy matches its intended distribution. Discovery and fitting must be measured separately: a model may encounter a rare state during training and still fail to allocate it the correct final probability.
+
+\subsection{Tail-aware generation}
+
+An upper tail is the high-reward end of a distribution. Value-at-Risk (VaR) gives the threshold at a chosen quantile, while right-CVaR summarises rewards beyond that threshold. Mean reward alone is insufficient because it can improve when poor samples disappear even if rare exceptional samples do not improve. Tail frequency alone is also insufficient because the same few extreme objects may be repeated.
+
+\citet{wang2026tail} formulate upper-tail improvement for continuous flow and diffusion models as a right-CVaR objective regularised towards a pre-trained distribution $p_{\mathrm{pre}}$:
+\begin{equation}
+\max_p \; \operatorname{R\text{-}CVaR}_{\beta,p}[r(X)]
+-\alpha D_{\mathrm{KL}}\!\left(p\,\|\,p_{\mathrm{pre}}\right).
+\end{equation}
+Their solution increases weight above an estimated threshold while the KL term limits movement away from the reference model. This is not a GFlowNet method and cannot simply be inserted into the TB loss. It does, however, provide a useful problem statement and a warning that upper-tail reward, validity and diversity should be measured separately.
+
+The literature therefore contains work on reward-proportional GFlowNets, high-reward replay, reaction-constrained molecular construction and tail-aware fine-tuning, but these strands do not answer the exact question studied here. The research gap is whether a discrete TB GFlowNet can learn a rare, simulator-defined upper-tail distribution over complete procedures under a finite evaluation budget. The experiment below tests this in a controlled space where every target probability is known.
+
+\section{Methodology}
+
+\subsection{Controlled ChemGymRL procedure task}
+
+The integration uses ChemGymRL's \texttt{FictReactBandit-v1} environment. Its fictitious network contains a desired product $I$ and an undesired product $E$. The raw outcome is
+\begin{equation}
+r(x)=n_I(x)-n_E(x),
+\end{equation}
+where $n_I$ and $n_E$ are the final simulated amounts. A higher value means that the procedure made more desired product relative to the undesired product. This is a methodological benchmark, not a claim about a real reaction.
+
+A procedure contains nine ordered choices: one temperature, four reagent amounts and four addition times. Each choice has three discrete values, producing $3^9=19{,}683$ complete procedures. The GFlowNet state is the partially filled nine-token sequence. The ChemGymRL bridge decodes a complete sequence, runs the simulator and returns the raw outcome. Automated tests compare the bridge with direct environment execution, check all supported token values, reject incomplete or invalid procedures, verify reward ordering and confirm exact enumeration.
+
+TB requires a strictly positive terminal reward, so the baseline target uses
+\begin{equation}
+R_{\mathrm{base}}(x)=
+\exp\!\left(\operatorname{clip}\!\left(\frac{r(x)}{0.05},-20,20\right)\right).
+\end{equation}
+The scale 0.05 controls concentration. It is not an intermediate ChemGymRL reward and it is not the sEH temperature parameter used in the earlier molecular check.
+
+\subsection{Experimental conditions}
+
+Four main conditions were compared. Standard TB used 32 newly sampled on-policy procedures per step. Positive replay added eight previously scored positive trajectories to each update. The no-replay upper-tail condition changed the terminal target but kept on-policy training. After that no-replay result showed almost no tail learning, an exploratory follow-up kept the shaped target and added four replay trajectories from the defined tail and four from outside it. The two replay pools were populated only by procedures discovered during on-policy training, and replay remained inactive until at least four examples had been found on each side of the threshold. The follow-up therefore tests whether controlled re-exposure is sufficient once rare procedures have been discovered; it does not assume an exhaustively supplied tail set.
+
+All main conditions used 1,000 optimisation steps, seeds 0, 17 and 42, and 1,024 final samples per trained model. Replay conditions used the same number of new on-policy procedures as their no-replay controls, so replay did not add simulator evaluations. It did add neural-network training trajectories. Full model and optimiser settings are listed in Appendix~\ref{app:settings}.
+
+\subsection{Upper-tail target}
+
+The fixed upper tail was defined as $r(x)>0.10$. It contains 117 procedures, or $0.594\%$ of the complete space. This fixed definition avoids an unstable quantile boundary caused by 13,851 procedures sharing exactly zero raw reward. A Wang-inspired positive target was then defined by
+\begin{equation}
+R_{\mathrm{tail}}(x)=R_{\mathrm{base}}(x)
+\exp\!\left(\lambda\frac{[r(x)-0.10]_+}{0.05}\right),
+\end{equation}
+where $[u]_+=\max(u,0)$. An exact offline sweep was used to choose $\lambda=0.25$ as a restrained setting. Under this target, the exact probability of the fixed tail rises from $21.44\%$ to $31.30\%$. The target is inspired by the excess-reward weighting of \citet{wang2026tail}, but it is not their anchored fine-tuning algorithm: no pre-trained reference model, KL penalty or learnt VaR threshold is used.
+
+\subsection{Evaluation}
+
+Exact enumeration gives the normalising constant and target probability of every procedure. The final policies were compared using mean raw reward, positive and fixed-tail fractions, top-100 frequency, unique procedure counts, duplicates, target-mass coverage and category total-variation (TV) error. TV error is half the summed absolute difference between generated and target category frequencies; zero is a perfect category match. Target-mass coverage is the sum of exact target probabilities assigned to the distinct procedures found, so it asks whether the sample discovered important parts of the target rather than merely many low-probability states. Tail frequency and unique tail procedures are reported together to distinguish broad tail coverage from repetition. Values are means and sample standard deviations across the three seeds.
+
+\section{Results}
+
+\subsection{Package and integration checks}
+
+The supplied sEH task was used as a local package check before ChemGymRL integration. Across three fixed-$\beta=4$ runs, the mean proxy reward rose from $0.214\pm0.016$ over steps 1--10 to $0.518\pm0.003$ over steps 491--500, while mean TB loss fell from $400.9\pm37.5$ to $8.87\pm0.43$. All 960 final molecular samples were valid and each seed produced 320 unique canonical representations. These results confirm stable execution of the supplied task, but they are not a reproduction of the original molecular paper or evidence of physical binding.
+
+The ChemGymRL bridge and exact-enumeration tests also passed. Every reported GFlowNet procedure was complete and valid, and no invalid trajectory or numerical failure occurred in the main three-seed experiments.
+
+\subsection{Learning the original reward distribution}
+
+Standard TB under-represented the useful region after 1,000 steps. Only $1.07\%\pm0.26\%$ of final procedures had positive raw reward, compared with $26.81\%$ under the exact target. The samples were highly varied, with $988\pm3$ unique procedures, but they covered only $5.06\%\pm0.12\%$ of exact target mass.
+
+Positive replay moved the policy much closer to the target. Target-mass coverage rose to $21.52\%\pm0.20\%$, close to the direct-target expectation of $22.47\%$, and category TV error fell from $0.261\pm0.009$ to $0.103\pm0.048$. The improvement came with overconcentration: positive procedures reached $36.43\%\pm4.54\%$, above the $26.81\%$ target, while unique procedures fell to $798\pm43$ and duplicates rose to $22.04\%\pm4.22\%$.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\linewidth]{figures/chemgymrl_three_seed_replay_summary.png}
+    \caption{Standard TB and positive replay under matched simulator-evaluation budgets. Bars show three-seed means, error bars show sample standard deviations, and dashed lines show exact or direct-target references. Replay improved access to important procedures but overshot parts of the target and reduced uniqueness.}
+    \label{fig:main-replay-summary}
+\end{figure}
+
+\subsection{Upper-tail target and exploratory replay follow-up}
+
+Changing the target alone did not make the finite model learn the upper tail. The exact shaped distribution assigns $31.30\%$ probability to the 117 fixed-tail procedures, but no-replay shaped models generated only $0.098\%\pm0.098\%$ tail samples. They produced $1.0\pm1.0$ unique tail procedures rather than the direct-target expectation of 83.2. Their final TB loss nevertheless fell to $2.66\pm0.21$, showing that a small or decreasing observed loss did not establish distributional accuracy in rarely visited states.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\linewidth]{figures/chemgymrl_upper_tail_final_comparison.png}
+    \caption{No-replay training under the baseline and shaped terminal targets. Coloured dashed markers show the exact expectation for each model's own target. Both trained policies remained far below their intended upper-tail mass.}
+    \label{fig:main-upper-tail-failure}
+\end{figure}
+
+The exploratory fixed-tail replay follow-up changed this result. The final tail fraction rose to $28.68\%\pm3.88\%$, close to the $31.30\%$ shaped target, and unique tail procedures rose to $79.7\pm0.6$, close to the expectation of 83.2. Mean raw reward reached $0.0541\pm0.0100$ against a target value of 0.0647. The duplicate fraction was $22.88\%\pm3.32\%$, compared with $24.77\%$ expected from direct target sampling, so the increased tail frequency was not produced by only one or two repeated procedures.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\linewidth]{figures/chemgymrl_fixed_tail_replay_summary.png}
+    \caption{Exploratory follow-up using the Wang-inspired upper-tail target with and without fixed-tail replay. Once active, replay supplied four previously discovered tail and four discovered non-tail trajectories per update. Dashed lines show the exact shaped-target references.}
+    \label{fig:main-fixed-tail-replay}
+\end{figure}
+
+\section{Discussion}
+
+The experiments answer the two research questions differently. For the original reward distribution, standard TB had not converged within the fixed budget. Positive replay reused informative outcomes and substantially improved target-mass coverage and category agreement, but it overrepresented positives and increased repetition. This supports the finite-training argument made by \citet{shen2023training}, while also showing why a replay buffer containing only preferred outcomes should not be treated as distributionally neutral.
+
+For upper-tail learning, reward shaping and exposure were both necessary in this small experiment. The shaped reward specified a clear target, but ordinary on-policy training rarely reached the 117 tail procedures and failed to learn their probability. Fixed-tail replay supplied those missing training examples and brought both tail frequency and unique tail coverage close to their exact references. The important result is therefore not simply that replay raised reward. It is that the learnt policy moved towards a separately calculated target while retaining nearly the expected number of distinct tail procedures.
+
+This also clarifies the relationship to \citet{wang2026tail}. Their work changes a pre-trained continuous model using a CVaR-derived objective and a KL anchor. This project instead trained a discrete GFlowNet from scratch on a manually shaped terminal reward. It should be described as Wang-inspired rather than as an implementation or reproduction of Tail-aware Flow Fine-Tuning. The connection is the upper-tail problem and excess-reward weighting, not an identical algorithm.
+
+The bridge to ChemGymRL is methodologically useful because it shows that a simulator outcome can supply a terminal GFlowNet reward. The small task also exposes errors which mean reward and TB loss would hide. It does not yet show that the approach scales to realistic chemistry. Reaction-aware GFlowNets solve molecular synthesizability and action-space problems that are absent from the nine-control benchmark, while ChemGymRL itself only simulates authored reactions.
+
+\section{Limitations}
+
+The procedure task is fictitious, discrete and exactly enumerable. It has only nine controls with three values each, and the simulator's twenty internal time steps are not GFlowNet decisions. Results cannot be interpreted as toxin neutralisation, laboratory feasibility or arbitrary molecule evaluation.
+
+The study uses three seeds, one 1,000-step budget and one selected tail strength. The exact sweep used to choose $\lambda=0.25$ is possible only because the state space is small. The fixed-tail replay follow-up uses a threshold chosen with exhaustive knowledge, although both replay pools contain only on-policy discoveries. It establishes that controlled re-exposure can solve the finite benchmark after enough tail examples have been encountered, but does not establish how a useful threshold or enough examples should be found in a large unknown space.
+
+Simulator calls were matched, but optimisation work was not: replay conditions process eight additional stored trajectories per update. Positive replay is not an exact reproduction of Shen et al., and the upper-tail condition is not a reproduction of Wang et al. The mixed rolling-percentile replay diagnostic was highly seed dependent and is reported in Appendix~\ref{app:additional-results}, not treated as a main result. Statistical claims remain descriptive because only three seeds were run.
+
+\section{Conclusion and Future Work}
+
+Before this experiment, it was unclear whether a terminal reward from ChemGymRL could train a TB GFlowNet to represent rare simulated procedure outcomes, or whether changing the reward target would be enough to improve the upper tail. The controlled benchmark shows three things. Standard finite training can remain far from a known reward-proportional target. Replay can correct much of that under a fixed simulator budget, but poorly balanced replay can overshoot and reduce diversity. Most importantly, upper-tail reward shaping alone failed, whereas the same target with controlled tail and non-tail exposure recovered both the intended tail mass and nearly the expected number of distinct tail procedures.
+
+The next step is to replace the hand-selected threshold and fixed replay mixture with a method that can operate when the tail is not known in advance. Candidate approaches include a discovery phase followed by diversity-aware replay, a frozen baseline policy used as an anchor, and quantile estimates based on a large reference sample. These should first be tested on a larger ChemGymRL procedure space using equal simulator-call budgets, then compared using tail hit rate, unique tail coverage, reward-band error, validity and duplication. A fuller Wang-style experiment would require pre-training, a fixed reference distribution and an explicit regularisation term rather than only a shaped reward.
+
+\appendix
+
+\section{Experimental Settings}
+\label{app:settings}
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{l l}
+\hline
+Setting & Value \\
+\hline
+Training objective & Trajectory Balance \\
+Procedure representation & Nine ordered categorical tokens \\
+Token values & $\{0,1,2\}$ \\
+Terminal-space size & $3^9=19{,}683$ \\
+Training steps & 1,000 \\
+New on-policy trajectories per step & 32 \\
+Replay trajectories per replay step & 8 \\
+Final generated procedures & 1,024 per seed \\
+Seeds & 0, 17 and 42 \\
+Model & Sequence Transformer, width 64, four layers \\
+Policy learning rate & $10^{-4}$ \\
+$\log Z$ learning rate & $10^{-2}$ \\
+Random-action probability & 0.05 \\
+Replay-buffer capacity & 512 \\
+Baseline reward scale & 0.05 \\
+Tail threshold & $r(x)>0.10$ \\
+Tail strength & $\lambda=0.25$ \\
+\hline
+\end{tabular}
+\caption{Main ChemGymRL GFlowNet settings. Replay variants changed the composition of the eight stored trajectories but not the 32 new on-policy trajectories.}
+\end{table}
+
+\section{Metric Definitions}
+
+\begin{itemize}
+    \item \textbf{Raw reward:} final desired product minus undesired product, before conversion to a positive GFlowNet reward.
+    \item \textbf{Positive fraction:} proportion of generated procedures with raw reward above zero.
+    \item \textbf{Defined-tail fraction:} proportion with raw reward above the fixed threshold 0.10.
+    \item \textbf{Top-100 fraction:} proportion belonging to the 100 highest-reward procedures in the exhaustive reference.
+    \item \textbf{Target-mass coverage:} sum of exact target probabilities of all distinct generated procedures.
+    \item \textbf{Category TV error:} half the absolute difference between generated and target probability across negative, zero and positive reward categories.
+    \item \textbf{Unique procedures:} number of distinct nine-token procedures in the 1,024 final samples.
+    \item \textbf{Duplicate fraction:} one minus the number of unique procedures divided by 1,024.
+    \item \textbf{Sample standard deviation:} variation across seeds 0, 17 and 42; it is not uncertainty over individual generated procedures.
+    \item \textbf{Direct-target reference:} the expected result of drawing 1,024 samples directly from the exactly known target distribution. It differs from a trained-model result.
+\end{itemize}
+
+\section{Additional Results}
+\label{app:additional-results}
+
+\subsection{Original-target replay values}
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{l c c c}
+\hline
+Metric & No replay & Positive replay & Reference \\
+\hline
+Mean raw reward & $-0.0052\pm0.0018$ & $0.0492\pm0.0076$ & $0.0425$ \\
+Positive fraction & $1.07\%\pm0.26\%$ & $36.43\%\pm4.54\%$ & $26.81\%$ \\
+Category TV error & $0.261\pm0.009$ & $0.103\pm0.048$ & $0$ \\
+Top-100 fraction & $0.10\%\pm0.00\%$ & $25.98\%\pm3.73\%$ & $20.59\%$ \\
+Target-mass coverage & $5.06\%\pm0.12\%$ & $21.52\%\pm0.20\%$ & $22.47\%$ \\
+Unique procedures & $988\pm3$ & $798\pm43$ & $864$ \\
+Duplicate fraction & $3.48\%\pm0.25\%$ & $22.04\%\pm4.22\%$ & $15.66\%$ \\
+\hline
+\end{tabular}
+\caption{Original-target results across three seeds. The reference is exact or is the expected value from 1,024 direct target samples.}
+\end{table}
+
+\subsection{Upper-tail values}
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{l c c c}
+\hline
+Metric & Shaped, no replay & Fixed-tail replay & Shaped target \\
+\hline
+Mean raw reward & $-0.0058\pm0.0022$ & $0.0541\pm0.0100$ & $0.0647$ \\
+Defined-tail fraction & $0.098\%\pm0.098\%$ & $28.68\%\pm3.88\%$ & $31.30\%$ \\
+Unique tail procedures & $1.0\pm1.0$ & $79.7\pm0.6$ & $83.2$ \\
+Top-100 fraction & $0.065\%\pm0.056\%$ & $27.44\%\pm4.18\%$ & $30.50\%$ \\
+Duplicate fraction & $3.91\%\pm0.64\%$ & $22.88\%\pm3.32\%$ & $24.77\%$ \\
+\hline
+\end{tabular}
+\caption{Upper-tail results across three seeds. Unique-count and duplicate references are direct-target expectations.}
+\end{table}
+
+\subsection{Mixed replay diagnostic}
+
+The mixed rolling-percentile method used four examples from the current upper buffer decile and four from the remainder. Across three seeds it produced $12.11\%\pm14.12\%$ positive procedures, category TV error $0.157\pm0.124$, target-mass coverage $10.65\%\pm8.99\%$ and $941\pm81$ unique procedures. Seeds 0 and 17 kept a zero cutoff and remained near the zero-reward plateau. Seed 42 crossed to a positive cutoff at about step 500 and produced $28.32\%$ positive procedures with TV error 0.015. The result shows that the rolling rule was sensitive to initial exploration and the large reward tie.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\linewidth]{figures/chemgymrl_upper_tail_target_sweep.png}
+    \caption{Exact offline sweep used to inspect the effect of $\lambda$ before the upper-tail training runs. Larger values increased tail mass but reduced expected overall uniqueness.}
+    \label{fig:appendix-tail-sweep}
+\end{figure}
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\iffalse
 \part{Scientific Review and Project Report}
 
 \section{Abstract}
@@ -763,4 +1048,5 @@ The Wang-inspired test uses one threshold and one selected strength after an off
     \item Zhang, D., Pan, L., Chen, R. T. Q., Courville, A. and Bengio, Y. (2024). \textit{Distributional GFlowNets with Quantile Flows}. Transactions on Machine Learning Research. \href{https://openreview.net/forum?id=vFSsRYGpjW}{OpenReview paper page}.
 \end{itemize}
 
+\fi
 \end{document}
