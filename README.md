@@ -1,137 +1,156 @@
-# GFlowNet Internship Project
+# Replay and Upper-Tail Learning in GFlowNets for Simulated Chemical Experiments
 
-Main project workspace.
+This repository contains an internship research project on finite-training
+behaviour in Generative Flow Networks (GFlowNets). It connects a discrete
+Trajectory Balance GFlowNet to a ChemGymRL simulator, then studies two related
+questions:
 
-## Recommended structure
+1. Can replay improve learning of a reward-proportional target when useful
+   simulator outcomes are rare?
+2. Once rare-state exposure is controlled, how does an upper-tail-shaped
+   terminal reward affect tail frequency and diversity?
 
-- `main.tex` contains the literature review and working notes
-- `Coding/` contains the dependency manifests and project experiments
+The main experiment uses ChemGymRL's fictitious `FictReactBandit-v1`
+environment. A procedure has nine controls with three values each, giving an
+exactly enumerable space of `3^9 = 19,683` terminal procedures. Enumeration
+makes it possible to compare learned policies with their exact target
+distributions instead of relying only on loss or mean reward.
 
-Suggested layout:
+This is a controlled proof of concept about simulator-guided GFlowNet training.
+It is not a claim about arbitrary chemistry, and the upper-tail experiment is
+not a reproduction of Wang et al.'s continuous-model fine-tuning method.
+
+## Main findings
+
+- Standard Trajectory Balance substantially underfit the known target within
+  the fixed training budget.
+- Positive replay increased exact target-mass coverage from `5.06%` to `21.52%`
+  without additional simulator calls, but also increased repetition.
+- With the same fixed-tail replay rule in both conditions, upper-tail shaping
+  increased final tail frequency by `5.83` percentage points but did not
+  increase the number of distinct tail procedures.
+- In this benchmark, replay primarily addressed rare-state exposure, while
+  shaping changed how much probability the learned policy assigned to the
+  exposed tail.
+
+The full methodology, limitations, and three-seed results are in
+[`main.tex`](main.tex). Generated figures used by the report are stored in
+[`figures/`](figures/).
+
+## Repository layout
 
 ```text
-gflownet-internship-project/
-├── main.tex
-├── README.md
+.
+├── main.tex                         # Research report
+├── references.bib                   # Report bibliography
+├── THIRD_PARTY_NOTICES.md           # Dependency licenses and attribution
+├── figures/                         # Report figures
 └── Coding/
-    ├── envs/
-    │   ├── gflownet-cpu-requirements.txt
-    │   ├── gflownet-cpu-working-requirements.txt
-    │   ├── chemgymrl-requirements.txt
-    │   └── chemgymrl-working-requirements.txt
     ├── chemgymrl_gflownet/
-    ├── recursionpharma-gflownet/
-    └── chemgymrl/
+    │   ├── src/chemgymrl_gflownet/ # Bridge, task, replay, and reward code
+    │   ├── scripts/                 # Training and analysis entry points
+    │   └── tests/                   # Unit and integration tests
+    ├── envs/                        # Direct and tested dependency lists
+    └── upstream/                    # Pinned GFlowNet revision and local patch
 ```
 
-`chemgymrl_gflownet` is the project-owned integration package. The
-`recursionpharma-gflownet` and `chemgymrl` directories are local clones of the
-upstream projects and are therefore excluded from this repository.
+The upstream `recursionpharma-gflownet` and `chemgymrl` repositories are cloned
+locally under `Coding/` and are intentionally excluded from version control.
 
-## Reproducing the GFlowNet dependency
+## Environment setup
 
-The exact upstream revision and the small local compatibility patch are stored
-in `Coding/upstream/`. From `Coding/`, prepare the dependency with:
-
-```bash
-git clone https://github.com/recursionpharma/gflownet.git recursionpharma-gflownet
-cd recursionpharma-gflownet
-git checkout da999404e997a302a81773eb183b1da6ec2a4449
-git apply --unidiff-zero ../upstream/recursionpharma-gflownet-local-fixes.patch
-```
-
-The patch corrects Flow Matching initialisation and disables gradient tracking
-during model-based trajectory sampling. It does not alter either loss equation.
-
-## Python setup
-
-Use a virtual environment, and do not install into the system Python.
-
-For this project, Python `3.10` or `3.11` is the safer choice.
-
-Your current system `python3` is `3.13`, which may be fine for simple work, but it is not the best match for the GFlowNet repo.
-
-Basic setup:
+The tested environment uses Python 3.10. Python 3.11 is supported by the local
+package metadata, but the pinned dependency set was prepared with Python 3.10.
 
 ```bash
-cd Coding
-python3 -m venv .venv
-source .venv/bin/activate
+git clone https://github.com/Levey222/gflownet-internship-project.git
+cd gflownet-internship-project
+
+python3.10 -m venv Coding/.venv
+source Coding/.venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
 ```
 
-Then in VS Code, select the interpreter from `Coding/.venv`.
-
-## Package lists
-
-There are four package lists in `Coding/envs/`.
-
-- `gflownet-cpu-requirements.txt`
-  This is the direct package list based on the Recursion GFlowNet repo.
-- `gflownet-cpu-working-requirements.txt`
-  This is the pinned working CPU setup to try first on this laptop.
-- `chemgymrl-requirements.txt`
-  This is the direct package list based on the ChemGymRL repo.
-- `chemgymrl-working-requirements.txt`
-  This records the ChemGymRL package versions used in the working environment.
-
-These files are reference lists. They are there so the setup is written down clearly in one place.
-
-## GFlowNet install notes
-
-The Recursion repo uses PyTorch Geometric packages such as `torch-scatter`, `torch-sparse`, and `torch-cluster`.
-
-These often need prebuilt wheels matched to the exact PyTorch version, so the install command uses the PyG wheel index to find compatible CPU builds.
-
-Recommended pattern:
+Clone the tested upstream revisions:
 
 ```bash
-cd Coding/recursionpharma-gflownet
-python -m pip install -r ../envs/gflownet-cpu-working-requirements.txt --find-links https://data.pyg.org/whl/torch-2.1.2+cpu.html
-python -m pip install -e . --no-deps
+git clone https://github.com/recursionpharma/gflownet.git Coding/recursionpharma-gflownet
+git -C Coding/recursionpharma-gflownet checkout da999404e997a302a81773eb183b1da6ec2a4449
+git -C Coding/recursionpharma-gflownet apply --unidiff-zero \
+  ../upstream/recursionpharma-gflownet-local-fixes.patch
+
+git clone https://github.com/chemgymrl/chemgymrl.git Coding/chemgymrl
+git -C Coding/chemgymrl checkout ab8227b6b33f13617b7e551bdf6b894df7eec68d
 ```
 
-If the repo dependencies fight with the local project environment, use a separate venv for each repo.
-
-## ChemGymRL install notes
-
-ChemGymRL is lighter and should be easier to install in a standard CPU environment.
-
-If you want to use the RL training scripts in that repo, you will also want:
+Install the pinned CPU dependencies and the three local packages:
 
 ```bash
-pip install stable-baselines3
+python -m pip install \
+  -r Coding/envs/gflownet-cpu-working-requirements.txt \
+  --find-links https://data.pyg.org/whl/torch-2.1.2+cpu.html
+python -m pip install -r Coding/envs/chemgymrl-working-requirements.txt
+python -m pip install pytest
+
+python -m pip install -e Coding/recursionpharma-gflownet --no-deps
+python -m pip install -e Coding/chemgymrl
+python -m pip install -e Coding/chemgymrl_gflownet
 ```
 
-## Upper-tail experiment
+The local GFlowNet patch corrects Flow Matching initialisation and disables
+gradient tracking during model-based trajectory sampling. It does not change
+the Flow Matching or Trajectory Balance loss equations.
 
-The Wang-inspired proof of concept changes the positive terminal target without
-changing the Trajectory Balance loss. The exact target sweep can be reproduced
-from the saved exhaustive table with:
+## Verification
+
+Run the project test suite from the repository root:
 
 ```bash
-Coding/.venv/bin/python Coding/chemgymrl_gflownet/scripts/analyze_upper_tail_targets.py \
-  --reference-csv Coding/chemgymrl_gflownet/results/exhaustive_reference_2026-07-28/procedures.csv \
-  --output-dir Coding/chemgymrl_gflownet/results/upper_tail_target_sweep_threshold010 \
-  --reward-scale 0.05 --tail-threshold 0.10 \
-  --strengths 0 0.1 0.25 0.5 0.75 1.0 --selected-strength 0.25
+Coding/.venv/bin/python -m pytest Coding/chemgymrl_gflownet/tests
 ```
 
-A matched no-replay training run uses:
+Run a small random ChemGymRL benchmark:
 
 ```bash
-Coding/.venv/bin/python Coding/chemgymrl_gflownet/scripts/train_procedure_gflownet.py \
+Coding/.venv/bin/python \
+  Coding/chemgymrl_gflownet/scripts/benchmark_fict_react.py \
+  --mode random --samples 100 --seed 0 \
+  --output-dir Coding/chemgymrl_gflownet/results/smoke_benchmark
+```
+
+Generated logs and result tables are ignored by Git.
+
+## Core experiments
+
+An exhaustive reference over all 19,683 procedures can be generated with:
+
+```bash
+Coding/.venv/bin/python \
+  Coding/chemgymrl_gflownet/scripts/benchmark_fict_react.py \
+  --mode exhaustive --seed 0 --reward-scale 0.05 \
+  --output-dir Coding/chemgymrl_gflownet/results/exhaustive_reference
+```
+
+The original-target baseline is:
+
+```bash
+Coding/.venv/bin/python \
+  Coding/chemgymrl_gflownet/scripts/train_procedure_gflownet.py \
   --steps 1000 --batch-size 32 --seed 0 --device cpu \
-  --reward-scale 0.05 --tail-threshold 0.10 --tail-strength 0.25 \
+  --reward-scale 0.05 \
   --validate-every 100 --validation-batches 1 --final-batches 32 \
-  --log-dir Coding/chemgymrl_gflownet/logs/upper_tail_seed0
+  --log-dir Coding/chemgymrl_gflownet/logs/baseline_seed0
 ```
 
-The controlled follow-up keeps that target fixed and adds four discovered tail
-and four discovered non-tail trajectories to each active training update:
+Add `--positive-replay --replay-batch-size 8 --replay-capacity 512` to run the
+positive-replay condition.
+
+The matched upper-tail condition uses the selected threshold and shaping
+strength together with fixed-tail replay:
 
 ```bash
-Coding/.venv/bin/python Coding/chemgymrl_gflownet/scripts/train_procedure_gflownet.py \
+Coding/.venv/bin/python \
+  Coding/chemgymrl_gflownet/scripts/train_procedure_gflownet.py \
   --steps 1000 --batch-size 32 --seed 0 --device cpu \
   --reward-scale 0.05 --tail-threshold 0.10 --tail-strength 0.25 \
   --fixed-tail-replay --replay-batch-size 8 --replay-capacity 512 \
@@ -140,31 +159,33 @@ Coding/.venv/bin/python Coding/chemgymrl_gflownet/scripts/train_procedure_gflown
   --log-dir Coding/chemgymrl_gflownet/logs/upper_tail_replay_seed0
 ```
 
-Replay starts only after four examples have been discovered on each side of the
-threshold. The replay trajectories do not require additional ChemGymRL calls.
+For the matched original-target control, use the same command without
+`--tail-strength 0.25`. The threshold then classifies replay samples but does
+not reshape their terminal rewards.
 
-To separate the effect of reward shaping from the effect of replay, the matched
-control uses the original terminal target with the same replay settings. The
-threshold classifies stored procedures for replay but does not alter their
-terminal rewards because the tail strength remains zero:
+The report uses seeds `0`, `17`, and `42`. Analysis and aggregation utilities
+for these runs are available in
+[`Coding/chemgymrl_gflownet/scripts/`](Coding/chemgymrl_gflownet/scripts/).
+
+## Building the report
+
+With a LaTeX distribution containing `latexmk`, `natbib`, and the standard
+graphics packages installed:
 
 ```bash
-Coding/.venv/bin/python Coding/chemgymrl_gflownet/scripts/train_procedure_gflownet.py \
-  --steps 1000 --batch-size 32 --seed 0 --device cpu \
-  --reward-scale 0.05 --tail-threshold 0.10 \
-  --fixed-tail-replay --replay-batch-size 8 --replay-capacity 512 \
-  --fixed-tail-replay-fraction 0.5 \
-  --validate-every 100 --validation-batches 1 --final-batches 32 \
-  --log-dir Coding/chemgymrl_gflownet/logs/baseline_target_replay_seed0
+latexmk -pdf main.tex
 ```
 
-This is an adaptation of the upper-tail problem to a discrete GFlowNet terminal
-reward. It is not a reproduction of Wang et al.'s continuous-model fine-tuning
-algorithm.
+The generated `main.pdf` and LaTeX build files are ignored by Git.
 
-## Current recommendation
+## Licensing and attribution
 
-- keep notes here
-- keep code in `Coding/`
-- keep the GFlowNet repo and ChemGymRL repo as separate folders inside `Coding/`
-- use separate virtual environments if dependency conflicts appear
+This repository currently has no blanket license for its original code,
+report, or figures. Making the repository public allows it to be viewed and
+forked through GitHub, but does not otherwise grant permission to reproduce,
+modify, or redistribute the original material.
+
+The upstream GFlowNet and ChemGymRL dependencies retain their own licenses and
+are not vendored in this repository. See
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for revisions, license
+details, and attribution.
